@@ -382,7 +382,7 @@ void setRotation(uint8_t m) {    // ce n'è anche una in ST77xx...
   }
 
 
-void drawPixel(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UINT16 color) {
+void drawPixel(UGRAPH_COORD_T x, UGRAPH_COORD_T y, GFX_COLOR color) {
 
 	if(boundaryCheck(x,y)) 
 		return;
@@ -394,7 +394,7 @@ void drawPixel(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UINT16 color) {
 
 
 
-void drawFastVLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T h, UINT16 color) {
+void drawFastVLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T h, GFX_COLOR color) {
 
 	// Rudimentary clipping
 	if(boundaryCheck(x,y))
@@ -412,7 +412,7 @@ BOOL boundaryCheck(UGRAPH_COORD_T x,UGRAPH_COORD_T y) {
 	return FALSE;
 	}
 
-void drawFastHLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, UINT16 color) {
+void drawFastHLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, GFX_COLOR color) {
 
 	// Rudimentary clipping
 	if(boundaryCheck(x,y)) 
@@ -425,7 +425,7 @@ void drawFastHLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, UINT16 
 
 
 // fill a rectangle
-void fillRect(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, UGRAPH_COORD_T h, UINT16 color) {
+void fillRect(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, UGRAPH_COORD_T h, GFX_COLOR color) {
 
 	if(boundaryCheck(x,y)) 
 		return;
@@ -451,7 +451,7 @@ inline void writeFillRectPreclipped(int16_t x, int16_t y,
   writeColor(color, (uint32_t)w * h);
   }
 
-void drawLine(UGRAPH_COORD_T x0, UGRAPH_COORD_T y0,UGRAPH_COORD_T x1, UGRAPH_COORD_T y1, UINT16 color) {
+void drawLine(UGRAPH_COORD_T x0, UGRAPH_COORD_T y0,UGRAPH_COORD_T x1, UGRAPH_COORD_T y1, GFX_COLOR color) {
 	BOOL steep;
 	GRAPH_COORD_T dx,dy;
 	GRAPH_COORD_T err;
@@ -548,7 +548,7 @@ void drawLine(UGRAPH_COORD_T x0, UGRAPH_COORD_T y0,UGRAPH_COORD_T x1, UGRAPH_COO
 	}
 
 
-void drawRect(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, UGRAPH_COORD_T h, UINT16 color){
+void drawRect(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, UGRAPH_COORD_T h, GFX_COLOR color){
 
 	HLine(x, y, w, color);
 	HLine(x, y+h-1, w, color);
@@ -574,7 +574,7 @@ void fillScreen(UINT16 color) {
 //	writecommand(CMD_NOP);
 	}
 
-void __attribute__((always_inline)) HLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, UINT16 color) {
+void __attribute__((always_inline)) HLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T w, GFX_COLOR color) {
 
   START_WRITE();
 	setAddrWindow(x, y, w, 1);
@@ -582,7 +582,7 @@ void __attribute__((always_inline)) HLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UG
   END_WRITE();
 	}
 
-void __attribute__((always_inline)) VLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T h, UINT16 color) {
+void __attribute__((always_inline)) VLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UGRAPH_COORD_T h, GFX_COLOR color) {
 
   START_WRITE();
 	setAddrWindow(x, y, 1, h);
@@ -590,7 +590,7 @@ void __attribute__((always_inline)) VLine(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UG
   END_WRITE();
 	}
 		
-void __attribute__((always_inline)) Pixel(UGRAPH_COORD_T x, UGRAPH_COORD_T y, UINT16 color) {
+void __attribute__((always_inline)) Pixel(UGRAPH_COORD_T x, UGRAPH_COORD_T y, GFX_COLOR color) {
 
   START_WRITE();
 	setAddrWindow(x, y, 1, 1);
@@ -911,7 +911,7 @@ uint8_t spiRead(void) {
   return b;
   }
 
-void begin(void) {
+void begin(uint32_t freq) {
 
 	sleep = 0;
 	_initError = 0b00000000;
@@ -930,21 +930,30 @@ extern const unsigned char c64logo[];
 void drawBG(void) {
 	char buffer[22];
 
-	gfx_drawRect(0,0,_TFTWIDTH-1,_TFTHEIGHT-1,GREEN);
-	gfx_drawRect(1,1,_TFTWIDTH-3,_TFTHEIGHT-3,LIGHTGREEN);
+	gfx_drawRect(0,0,_TFTWIDTH-1,_TFTHEIGHT,GREEN);
+	gfx_drawRect(1,1,_TFTWIDTH-2,_TFTHEIGHT-2,LIGHTGREEN);
 
 	setTextSize(1);
 	setTextColor(BRIGHTGREEN);
 	LCDXY(0,1);
 	gfx_print(CopyrightString);
 
+#ifdef COMMODORE64
   drawBitmap4(40,28,c64logo);
+#endif
   
 	setTextColor(BRIGHTCYAN);
 	LCDXY(8,14);
 	gfx_print("booting...");
   
-  DelayMs(800); 
+  __delay_ms(800); 
+  
+#ifdef AMICO2000
+  LCDCls();
+#endif
+#ifdef APPLE2
+  LCDCls();
+#endif
 	}
 
 //retrocompatibilità con lcd.c ecc

@@ -60,7 +60,7 @@
 #pragma config FNOSC = FRCDIV           // Oscillator Selection bits (Fast RC oscillator (FRC) with divide-by-N)
 #pragma config PLLSRC = FRC             // System PLL Input Clock Selection bit (FRC oscillator is selected as PLL reference input on device reset)
 #pragma config SOSCEN = OFF             // Secondary Oscillator Enable bit (Secondary oscillator (SOSC) is enabled)
-#pragma config IESO = OFF               // Two Speed Startup Enable bit (Two speed startup is disabled)
+#pragma config IESO = ON               // Two Speed Startup Enable bit (Two speed startup is enabled)
 #pragma config POSCMOD = OFF            // Primary Oscillator Selection bit (Primary oscillator is disabled)
 #pragma config OSCIOFNC = OFF           // System Clock on CLKO Pin Enable bit (OSCO pin operates as a normal I/O)
 #pragma config SOSCSEL = ON            // Secondary Oscillator External Clock Enable bit (Crystal is used (RA4 and RB4 are controlled by SOSC))
@@ -87,11 +87,11 @@
 // DEVCFG2
 /* Default SYSCLK = 200 MHz (8MHz FRC / FPLLIDIV * FPLLMUL / FPLLODIV) */
 //#pragma config FPLLIDIV = DIV_1, FPLLMULT = MUL_50, FPLLODIV = DIV_2
-#pragma config FPLLIDIV = DIV_2         // System PLL Input Divider (8x Divider)
-#pragma config FPLLRNG = RANGE_34_68_MHZ// System PLL Input Range (34-68 MHz Input)
+#pragma config FPLLIDIV = DIV_1         // System PLL Input Divider (1x Divider)
+#pragma config FPLLRNG = RANGE_5_10_MHZ// System PLL Input Range (5-10 MHz Input)
 #pragma config FPLLICLK = PLL_FRC       // System PLL Input Clock Selection (FRC is input to the System PLL)
-#pragma config FPLLMULT = MUL_50       // System PLL Multiplier (PLL Multiply by 128)
-#pragma config FPLLODIV = DIV_2        // System PLL Output Clock Divider (32x Divider)
+#pragma config FPLLMULT = MUL_51       // System PLL Multiplier (PLL Multiply by 50)
+#pragma config FPLLODIV = DIV_2        // System PLL Output Clock Divider (2x Divider)
 #pragma config UPLLFSEL = FREQ_24MHZ    // USB PLL Input Frequency Selection (USB PLL input is 24 MHz)
 
 // DEVCFG1
@@ -114,7 +114,8 @@
 // DEVCFG0
 #pragma config DEBUG = OFF              // Background Debugger Enable (Debugger is disabled)
 #pragma config JTAGEN = OFF             // JTAG Enable (JTAG Disabled)
-#pragma config ICESEL = ICS_PGx2        // ICE/ICD Comm Channel Select (Communicate on PGEC1/PGED1)
+#pragma config ICESEL = ICS_PGx1        // ICE/ICD Comm Channel Select (Communicate on PGEC1/PGED1)
+// 1 su schedina PIC32 primissima, 2 su succ.
 #pragma config TRCEN = OFF              // Trace Enable (Trace features in the CPU are disabled)
 #pragma config BOOTISA = MIPS32         // Boot ISA Selection (Boot code and Exception code is MIPS32)
 #pragma config FECCCON = OFF_UNLOCKED   // Dynamic Flash ECC Configuration (ECC and Dynamic ECC are disabled (ECCCON bits are writable))
@@ -322,21 +323,30 @@
 
 
 
+#ifdef COMMODORE64
 const char CopyrightString[]= {'C','6','4',' ','E','m','u','l','a','t','o','r',' ','v',
-	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '0','6','/','1','3','/','2','2', 0 };
+#endif
+#ifdef APPLE2
+const char CopyrightString[]= {'A','p','p','l','e',']','[',' ','E','m','u','l','a','t','o','r',' ','v',
+#endif
+#ifdef AMICO2000
+const char CopyrightString[]= {'A','m','i','c','o','2','0','0','0',' ','E','m','u','l','a','t','o','r',' ','v',
+#endif
 
-const char Copyr1[]="(C) Dario's Automation 2019-2021 - G.Dar\xd\xa\x0";
+	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '2','5','/','1','1','/','2','2', 0 };
+
+const char Copyr1[]="(C) Dario's Automation 2019-2022 - G.Dar\xd\xa\x0";
 
 
 
 // Global Variables:
 BOOL fExit,debug;
 extern BYTE DoIRQ,DoNMI,DoHalt,DoReset,ColdReset;
-#if defined(__PIC32MM__)
 extern BYTE ram_seg[MAX_RAM],*stack_seg;
+#ifdef COMMODORE64
+#if defined(__PIC32MM__)
 extern BYTE ColorRAM[1024];
 #else
-extern BYTE ram_seg[0x10000],*stack_seg;
 extern BYTE ColorRAM[1024],VideoHIRAM[((HORIZ_SIZE/2)+(HORIZ_OFFSCREEN*2))*(MAX_RASTER-MIN_RASTER+1) /* /8 FARE */];
 #endif
 extern BYTE VICReg[64];
@@ -348,9 +358,36 @@ extern BYTE CPUIOReg[2];
 extern BYTE PLAReg[1];
 extern BYTE Keyboard[8];
 extern volatile BYTE CIA1IRQ,CIA2IRQ,VICIRQ;
+#endif
+#ifdef AMICO2000
+extern BYTE Keyboard[4];
+#endif
+#ifdef APPLE2
+extern BYTE Keyboard[1];
+extern BYTE LoHiRes;
+#endif
 
+#ifdef COMMODORE64
 const char keysFeed[]="10 PRINT TI:?\r20 POKE 53281,2\rPOKE 54273,100\rLIST\rRUN\r";
 volatile BYTE *keysFeedPtr=NULL;
+#endif
+#ifdef AMICO2000
+const char keysFeed[]="*0200++++*0200\r+";
+volatile BYTE keysFeedPtr=sizeof(keysFeed)-1;
+#endif
+#ifdef APPLE2
+// https://www.landsnail.com/a2ref.htm
+const char *keysFeed2="10 PRINT 5*2\r20 TEXT\rLIST\rRUN\r";
+const char *keysFeed1="PRINT 512,476\r";   // 
+const char *keysFeed3="HOME:PRINT 25003000\r";   // 
+const char *keysFeed4="PRINT FRE(0),15,3*7 \r";   // 
+//const char *keysFeed5="PRONT\r";   //
+const char *keysFeed5="15 HGR:HCOLOR=3\r20 HPLOT 108,4 TO 170,4 TO 213,47 TO 213,110\rRUN\r";
+//const char keysFeed[]="10 PRINT 5*2\rLIST\rRUN\r";
+BYTE whichKeysFeed=0;
+char keysFeed[40]={0};
+volatile BYTE keysFeedPtr=255;
+#endif
 static WORD dividerEmulKbd=0;
 
 #if defined(__PIC32MM__)
@@ -599,6 +636,13 @@ struct RFB_PIXEL_FORMAT VNCFormat;
 #endif
 
 
+
+#if defined(__PIC32MM__)
+#define ROWINI_OFFSET 0
+//#define USA_COMPRESSION 1
+BYTE myRowIni=0;
+
+#ifdef COMMODORE64
 const WORD textColors[16]={BLACK,WHITE,RED,CYAN,MAGENTA,GREEN,BLUE,YELLOW,
 	ORANGE,BROWN,BRIGHTRED,DARKGRAY,GRAY128,LIGHTGREEN,BRIGHTCYAN,LIGHTGRAY};
 /*COLORREF Colori[16]={
@@ -620,13 +664,6 @@ const WORD textColors[16]={BLACK,WHITE,RED,CYAN,MAGENTA,GREEN,BLUE,YELLOW,
 	RGB(0x80,0x80,0xff),	 // blu chiaro
 	RGB(0xa8,0xa8,0xa8)		 // grigio 3
 	};*/
-
-
-
-#if defined(__PIC32MM__)
-#define ROWINI_OFFSET 0
-//#define USA_COMPRESSION 1
-BYTE myRowIni=0;
 
 int UpdateScreen(SWORD rowIni, SWORD rowFin) {
 	register int i,j,k;
@@ -1166,9 +1203,12 @@ skippa:
 
   
 	}
-
+#endif
+#ifdef APPLE2
+#endif
 #else
 
+#ifdef COMMODORE64
 int PlotChar(DWORD pos,WORD ch,BYTE c) {
 	BYTE *p,*p1;
   BYTE c1h,c1l,c2h,c2l;
@@ -1507,7 +1547,295 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
 	}
 
 #endif
+#endif
 
+
+#ifdef AMICO2000
+WORD displayColor[3]={BLACK,BRIGHTRED,RED};
+
+int PlotDisplay(WORD pos,BYTE ch,BYTE c) {
+	register int i;
+  int x,y;
+  SWORD color;
+
+#define DIGIT_X_SIZE 16
+#define DIGIT_Y_SIZE 30
+#define DIGIT_OBLIQ 2
+  
+  x=13;
+  y=10;
+  x+=(DIGIT_X_SIZE+4)*pos;
+  if(pos>=4)
+    x+=14;     // 4 digit address, 2 digit data
+//	fillRect(x,y,DIGIT_X_SIZE+3,DIGIT_Y_SIZE+1,BLACK);
+  
+  if(c)
+    color=BRIGHTRED;
+  else
+    color=RED;
+  if(ch & 1) {
+    drawLine(x+1+DIGIT_OBLIQ,y+1,x+DIGIT_X_SIZE+DIGIT_OBLIQ,y+1,color);
+    }
+  else
+    drawLine(x+1+DIGIT_OBLIQ,y+1,x+DIGIT_X_SIZE+DIGIT_OBLIQ,y+1,BLACK);
+  if(ch & 2) {
+    drawLine(x+DIGIT_X_SIZE+DIGIT_OBLIQ,y+1,x+DIGIT_X_SIZE+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,color);
+    }
+  else
+    drawLine(x+DIGIT_X_SIZE+DIGIT_OBLIQ,y+1,x+DIGIT_X_SIZE+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,BLACK);
+  if(ch & 4) {
+    drawLine(x+DIGIT_X_SIZE+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,x+DIGIT_X_SIZE,y+DIGIT_Y_SIZE,color);
+    }
+  else
+    drawLine(x+DIGIT_X_SIZE+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,x+DIGIT_X_SIZE,y+DIGIT_Y_SIZE,BLACK);
+  if(ch & 8) {
+    drawLine(x+1,y+DIGIT_Y_SIZE,x+DIGIT_X_SIZE,y+DIGIT_Y_SIZE,color);
+    }
+  else
+    drawLine(x+1,y+DIGIT_Y_SIZE,x+DIGIT_X_SIZE,y+DIGIT_Y_SIZE,BLACK);
+  if(ch & 16) {
+    drawLine(x+1+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,x+1,y+DIGIT_Y_SIZE,color);
+    }
+  else
+    drawLine(x+1+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,x+1,y+DIGIT_Y_SIZE,BLACK);
+  if(ch & 32) {
+    drawLine(x+1+DIGIT_OBLIQ,y+1,x+1+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,color);
+    }
+  else
+    drawLine(x+1+DIGIT_OBLIQ,y+1,x+1+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,BLACK);
+  if(ch & 64) {
+    drawLine(x+1+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,x+DIGIT_X_SIZE+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,color);
+    }
+  else
+    drawLine(x+1+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,x+DIGIT_X_SIZE+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,BLACK);
+// più bello..?    drawLine(x+2+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,x-1+DIGIT_X_SIZE+DIGIT_OBLIQ/2,y+DIGIT_Y_SIZE/2,BLACK);
+  if(ch & 128) {
+//    drawCircle(x+DIGIT_X_SIZE+1,y+DIGIT_Y_SIZE+1,1,color);    // non usato su Amico...
+    }
+  
+	}
+#endif
+
+
+#ifdef APPLE2
+#ifdef ST7735
+#define ROWINI_OFFSET 32
+#endif
+#ifdef ILI9341
+#define ROWINI_OFFSET 32
+#endif
+#define REAL_SIZE    1      // diciamo :)
+const WORD loresColors[16]={BLACK,RED,BLUE,MAGENTA,GREEN,DARKGRAY,LIGHTBLUE,BRIGHTBLUE,
+  BROWN,ORANGE,LIGHTGRAY,LIGHTMAGENTA,LIGHTGREEN,YELLOW,BRIGHTGREEN,WHITE};
+const WORD hiresColors[2][4]={{BLACK,LIGHTGREEN,MAGENTA,WHITE},{BLACK,ORANGE,LIGHTBLUE,WHITE}};
+
+int UpdateScreen(SWORD rowIni, SWORD rowFin) {
+	register int i,j;
+	int k,y1,y2,x2,row1,row2,ofs;
+	register BYTE *p,*p1;
+  BYTE ch,color,notinverted;
+  static BYTE flashCount;
+
+  const int row[24]= {0x0000, 0x0080, 0x0100, 0x0180, 0x0200, 0x0280, 0x0300, // non sono in sequenza..
+    0x0380, 0x0028, 0x00A8, 0x0128, 0x01A8, 0x0228, 0x02A8, 0x0328, 0x03A8, 
+    0x0050, 0x00D0, 0x0150, 0x01D0, 0x0250, 0x02D0, 0x0350, 0x03D0};
+
+  // ci mette circa 50mS ogni passata... 
+  
+	// per SPI DMA https://www.microchip.com/forums/m1110777.aspx#1110777
+
+  LED3 = 1;
+  
+  flashCount++;
+  flashCount &= 15;
+
+  row1=rowIni;
+  row2=rowFin;
+  y1=row1/8;
+  y2=row2/8;
+  y2=min(y2,VERT_SIZE/8);
+#ifdef REAL_SIZE    
+  x2=160/8;
+  y2=128/8;    // 
+  if(rowIni>=128)
+    rowIni=128;
+  if(rowFin>=128)
+    rowFin=128;
+#else
+  x2=HORIZ_SIZE/8;
+  
+#endif
+  START_WRITE();
+  setAddrWindow(0,rowIni,_width,rowFin-rowIni);
+  
+  if(LoHiRes & 8) {     // 280*192
+  //https://www.xtof.info/hires-graphics-apple-ii.html
+    if(LoHiRes & 2) {     // mixed mode oppure full graphic
+      }
+    ofs=0;
+    for(i=y1; i<y2; i++) {
+        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x2000 : 0x4000)]) + ofs);    // inizio riga corrente
+        
+        // USARE row come in text!
+        
+#ifdef REAL_SIZE    
+        for(j=0; j<22; j++) {
+#else
+        for(j=0; j<40; j++) {
+#endif
+          ch=*p1++;
+          color=ch & 0x80 ? 1 : 0;
+
+#ifdef REAL_SIZE    
+          writedata16(hiresColors[ch][color]);     // 40x7=280
+          writedata16(hiresColors[ch][color]);     // 
+          writedata16(hiresColors[ch][color]);     // 
+          writedata16(hiresColors[ch][color]);     // 
+          writedata16(hiresColors[ch][color]);     // 
+          writedata16(hiresColors[ch][color]);     // 
+          writedata16(hiresColors[ch][color]);     // 
+#else
+          writedata16(hiresColors[ch][color]);     // 40x7=280 -> 160
+          writedata16(hiresColors[ch][color]);     // 
+          writedata16(hiresColors[ch][color]);     // 
+          writedata16(hiresColors[ch][color]);     // 
+#endif
+
+#ifdef USA_SPI_HW
+          ClrWdt();
+#endif
+    //	writecommand(CMD_NOP);
+
+          }
+        
+#ifndef REAL_SIZE    
+//FINIRE!        if(i==2 || i==4 || i==6)      // 8:5 -> 192:128
+//          i++;
+#endif
+
+      ofs += 40;
+      }
+    }
+  else if(!(LoHiRes & 1)) {     // 80*40 o 48
+// https://en.wikipedia.org/wiki/Apple_II_graphics#Low-Resolution_(Lo-Res)_graphics    
+    if(LoHiRes & 2) {     // mixed mode oppure full graphic
+      }
+    ofs=0;
+    for(i=y1; i<y2; i++) {
+      for(k=0; k<3; k++) {      // scanline del carattere da plottare; 40x3=120
+        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x0800 : 0x0400)]) + ofs);    // inizio riga corrente
+        
+        // USARE row come in text!
+        
+        for(j=0; j<40; j++) {
+          ch=*p1++;
+
+          writedata16(loresColors[ch]);     // 40x4=160
+          writedata16(loresColors[ch]);     // 
+          writedata16(loresColors[ch]);     // 
+          writedata16(loresColors[ch]);     // 
+
+#ifdef USA_SPI_HW
+          ClrWdt();
+#endif
+    //	writecommand(CMD_NOP);
+
+          }
+        }
+
+      ofs += 40;
+      if(!((i+1) % 3))      // 3x40pixel ogni 128byte, salto gli ultimi 8
+        ofs+=8;
+      }
+    }
+  else {    // text  https://github-wiki-see.page/m/cc65/wiki/wiki/Apple-II-11a.-Text-Mode  
+    for(i=y1; i<y2; i++) {
+#ifdef REAL_SIZE    
+      for(k=0; k<8; k++) {      // scanline del carattere da plottare
+#else
+      for(k=0; k<8; k++) {      // scanline del carattere da plottare
+#endif
+        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x0800 : 0x0400) + row[i]]));    // carattere a inizio riga corrente
+#ifdef REAL_SIZE    
+        for(j=0; j<160/8; j++) {
+#else
+        for(j=0; j<HORIZ_SIZE/8; j++) {
+#endif
+          ch=*p1++;
+          if(ch < 0x40)
+            notinverted=0;
+          else if(ch < 0x80) {
+            if(flashCount>7)
+              notinverted=!notinverted;
+            }
+          else
+            notinverted=1;
+          ch &= 0x3f;     // 
+#ifdef REAL_SIZE    
+          p=((BYTE*)&AppleChar)+(((DWORD)ch)*8)+k;    // pattern del carattere da disegnare
+#else
+          p=((BYTE*)&AppleChar)+(((DWORD)ch)*8)+(k+1);    // pattern del carattere da disegnare
+#endif
+          ch=*p;
+
+#ifdef REAL_SIZE    
+          if(!notinverted) {
+            writedata16(ch & 0x80 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x40 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x20 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x10 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x8 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x4 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x2 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x1 ? BLACK : BRIGHTGREEN);     // 
+            }
+          else {
+            writedata16(ch & 0x80 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x40 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x20 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x10 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x8 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x4 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x2 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x1 ? BRIGHTGREEN : BLACK);     // 
+            }
+#else
+          if(!notinverted) {
+            writedata16(ch & 0x80 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x20 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x8 ? BLACK : BRIGHTGREEN);     // 
+            writedata16(ch & 0x2 ? BLACK : BRIGHTGREEN);     // 4:8 -> 320:160
+            }
+          else {
+            writedata16(ch & 0x80 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x20 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x8 ? BRIGHTGREEN : BLACK);     // 
+            writedata16(ch & 0x2 ? BRIGHTGREEN : BLACK);     // 4:8 -> 320:160
+            }
+#endif
+
+#ifdef USA_SPI_HW
+          ClrWdt();
+#endif
+    //	writecommand(CMD_NOP);
+
+          }
+#ifndef REAL_SIZE    
+        if(k==2 || k==4 || k==6)      // 8:5 -> 192:128
+          k++;
+#endif
+
+        }
+
+      }
+    }
+  
+  END_WRITE();
+    
+  LED3 = 0;     // ~50mS  24/11/22
+  
+	}
+#endif
 
 int main(void) {
 
@@ -1529,13 +1857,13 @@ int main(void) {
   while(OSCCONbits.OSWEN == 1)
       Nop();
 
-  SPLLCON = 0x02050080;
+  SPLLCON = 0x00020080  /*0x02050080*/;   // 32MHz overclock, :1 x4
   OSCCONSET = ( 0b001 << _OSCCON_NOSC_POSITION ) | _OSCCON_OSWEN_MASK;
   while(OSCCONbits.OSWEN == 1)
       Nop();
 
-  OSCTUN = 0x0000001f;        // forzo al max :) verso i 25MHz
-  CFGCONbits.BMXARB = 0b10;
+//  OSCTUN = 0x0000001f;        // forzo al max :) verso i 25MHz NO, OVERCLOCK! v.
+// cos'era?? non vedo un senso, 2022  CFGCONbits.BMXARB = 0b10;
   SYSKEY = 0;
 
 
@@ -1700,16 +2028,21 @@ int main(void) {
 
       
   
+  myINTEnableSystemMultiVectoredInt();
+#ifndef USING_SIMULATOR
+  ShortDelay(50000); 
+#endif
+  
   Timer_Init();
   PWM_Init();
   UART_Init(/*230400L*/ 115200L);
 
-  myINTEnableSystemMultiVectoredInt();
-  ShortDelay(50000); 
 
   
 //    	ColdReset=0;    Emulate(0);
 
+#ifndef USING_SIMULATOR
+  
 #if defined(__PIC32MM__)
   __delay_ms(200);
 #else
@@ -1741,14 +2074,25 @@ int main(void) {
   
   __delay_ms(200);
 #endif
+  
+#ifdef AMICO2000
+  fillScreen(BLACK);
+	setTextSize(1);
+	setTextColor(ORANGE);
+	LCDXY(3,14);
+	gfx_print("amico2000 by ASEL");
+#endif
 
-//#endif
+  
+#endif
 
+#ifdef COMMODORE64
   if(!SW2)      //
     PLAReg[0]=0;    // cartridge a 8000-bfff, kernel al suo posto
 //    memcpy(&ram_seg[0x8000],&C64cartridge,0x4000);
+#endif
   
-	ColdReset=0;
+	ColdReset=1;
 
   
 #if defined(__PIC32MM__)
@@ -1789,8 +2133,6 @@ int main(void) {
 
   }
 
-
-#define FOSC 8000000UL    //Oscillator frequency
 
 void mySYSTEMConfigPerformance(void) {
   unsigned PLLIDIV;
@@ -1843,7 +2185,11 @@ void mySYSTEMConfigPerformance(void) {
 
 void myINTEnableSystemMultiVectoredInt(void) {
 
+#if defined(__PIC32MM__)
+  PRISS = 0x00010000;   // QUA ce ne sono solo 2!! usiamo quindi lo 0 per quelli lenti e 1 per il veloce
+#else
   PRISS = 0x76543210;
+#endif
   INTCONSET = _INTCON_MVEC_MASK /*0x1000*/;    //MVEC
   asm volatile ("ei");
   //__builtin_enable_interrupts();
@@ -1915,7 +2261,7 @@ void ShortDelay(                       // Short Delay
 {
   DWORD StartTime;                    // Start Time
   StartTime = ReadCoreTimer();         // Get CoreTimer value for StartTime
-  while ( (DWORD )(ReadCoreTimer() - StartTime) < DelayCount ) 
+  while( (DWORD )(ReadCoreTimer() - StartTime) < DelayCount ) 
     ClrWdt();
   }
  
@@ -2218,7 +2564,10 @@ void __ISR ( _CHANGE_NOTICE_B_VECTOR, IPL5AUTO ) CNBInt(void) {
 BYTE isCtrlAltCanc=0;
 int emulateKBD(unsigned char ch) {
   int i;
+
+#ifdef COMMODORE64
 // https://www.c64-wiki.com/wiki/Keyboard
+//	https://github.com/go4retro/c-key/blob/master/src/poll64.c
 	switch(ch) {
     case 0:
       for(i=0; i<8; i++)
@@ -2444,16 +2793,331 @@ int emulateKBD(unsigned char ch) {
 			Keyboard[0] &= 0xf7;
 			break;
 		}
+#endif
+
+#ifdef AMICO2000
+ 	switch(ch) {
+    case 0:
+      for(i=0; i<3; i++)
+        Keyboard[i]=0xff;
+      break;
+		case '0':
+			Keyboard[0] &= 0xbf;
+			break;
+		case '1':
+			Keyboard[0] &= 0xdf;
+			break;
+		case '2':
+			Keyboard[0] &= 0xef;
+			break;
+		case '3':
+			Keyboard[0] &= 0xf7;
+			break;
+		case '4':
+			Keyboard[0] &= 0xfb;
+			break;
+		case '5':
+			Keyboard[0] &= 0xfd;
+			break;
+		case '6':
+			Keyboard[0] &= 0xfe;
+			break;
+		case '7':
+			Keyboard[1] &= 0xbf;
+			break;
+		case '8':
+			Keyboard[1] &= 0xdf;
+			break;
+		case '9':
+			Keyboard[1] &= 0xef;
+			break;
+		case 'A':
+			Keyboard[1] &= 0xf7;
+			break;
+		case 'B':
+			Keyboard[1] &= 0xfb;
+			break;
+		case 'C':
+			Keyboard[1] &= 0xfd;
+			break;
+		case 'D':
+			Keyboard[1] &= 0xfe;
+			break;
+		case 'E':
+			Keyboard[2] &= 0xbf;
+			break;
+		case 'F':
+			Keyboard[2] &= 0xdf;
+			break;
+		case '+':       // +
+			Keyboard[2] &= 0xfb;
+			break;
+		case '\r':      // RUN
+			Keyboard[2] &= 0xfd;
+			break;
+		case ' ':       // PC (REG))
+			Keyboard[2] &= 0xfe;
+			break;
+		case '*':       // AD
+			Keyboard[2] &= 0xef;
+			break;
+		case '/':       // DA
+			Keyboard[2] &= 0xf7;
+			break;
+		}
+#endif
+    
+#ifdef APPLE2
+//		https://forum.vcfed.org/index.php?threads/apple-ii-emulator-keypress-handling.1238897/
+	switch(ch) {
+    case 0:
+      Keyboard[0]=0;
+      break;
+		case ' ':
+			Keyboard[0] =  0x20 | 0x80;
+			break;
+		case 'A':
+			Keyboard[0] =  0x41 | 0x80;
+			break;
+		case 'B':
+			Keyboard[0] =  0x42 | 0x80;
+			break;
+		case 'C':
+			Keyboard[0] =  0x43 | 0x80;
+			break;
+		case 'D':
+			Keyboard[0] =  0x44 | 0x80;
+			break;
+		case 'E':
+			Keyboard[0] =  0x45 | 0x80;
+			break;
+		case 'F':
+			Keyboard[0] =  0x46 | 0x80;
+			break;
+		case 'G':
+			Keyboard[0] =  0x47 | 0x80;
+			break;
+		case 'H':
+			Keyboard[0] =  0x48 | 0x80;
+			break;
+		case 'I':
+			Keyboard[0] =  0x49 | 0x80;
+			break;
+		case 'J':
+			Keyboard[0] =  0x4a | 0x80;
+			break;
+		case 'K':
+			Keyboard[0] =  0x4b | 0x80;
+			break;
+		case 'L':
+			Keyboard[0] =  0x4c | 0x80;
+			break;
+		case 'M':
+			Keyboard[0] =  0x4d | 0x80;
+			break;
+		case 'N':
+			Keyboard[0] =  0x4e | 0x80;
+			break;
+		case 'O':
+			Keyboard[0] =  0x4f | 0x80;
+			break;
+		case 'P':
+			Keyboard[0] =  0x50 | 0x80;
+			break;
+		case 'Q':
+			Keyboard[0] =  0x51 | 0x80;
+			break;
+		case 'R':
+			Keyboard[0] =  0x52 | 0x80;
+			break;
+		case 'S':
+			Keyboard[0] =  0x53 | 0x80;
+			break;
+		case 'T':
+			Keyboard[0] =  0x54 | 0x80;
+			break;
+		case 'U':
+			Keyboard[0] =  0x55 | 0x80;
+			break;
+		case 'V':
+			Keyboard[0] =  0x56 | 0x80;
+			break;
+		case 'W':
+			Keyboard[0] =  0x57 | 0x80;
+			break;
+		case 'X':
+			Keyboard[0] =  0x58 | 0x80;
+			break;
+		case 'Y':
+			Keyboard[0] =  0x59 | 0x80;
+			break;
+		case 'Z':
+			Keyboard[0] =  0x5a | 0x80;
+			break;
+		case '0':
+			Keyboard[0] =  0x30 | 0x80;
+			break;
+		case '!':
+			Keyboard[0] =  '!' | 0x80;
+			break;
+		case '1':
+			Keyboard[0] =  0x31 | 0x80;
+			break;
+		case '\"':
+			Keyboard[0] =  '\"' | 0x80;
+			break;
+		case '2':
+			Keyboard[0] =  0x32 | 0x80;
+			break;
+		case '#':
+			Keyboard[0] =  '#' | 0x80;
+			break;
+		case '3':
+			Keyboard[0] =  0x33 | 0x80;
+			break;
+		case '$':
+			Keyboard[0] =  '$' | 0x80;
+			break;
+		case '4':
+			Keyboard[0] =  0x34 | 0x80;
+			break;
+		case '%':
+			Keyboard[0] =  '%' | 0x80;
+			break;
+		case '5':
+			Keyboard[0] =  0x35 | 0x80;
+			break;
+		case '&':
+			Keyboard[0] =  '&' | 0x80;
+			break;
+		case '6':
+			Keyboard[0] =  0x36 | 0x80;
+			break;
+		case '\'':
+			Keyboard[0] =  '\\' | 0x80;
+			break;
+		case '7':
+			Keyboard[0] =  0x37 | 0x80;
+			break;
+		case '(':
+			Keyboard[0] =  '(' | 0x80;
+			break;
+		case '8':
+			Keyboard[0] =  0x38 | 0x80;
+			break;
+		case ')':
+			Keyboard[0] =  ')' | 0x80;
+			break;
+		case '9':
+			Keyboard[0] =  0x39 | 0x80;
+			break;
+		case '<':
+			Keyboard[0] =  '<' | 0x80;
+			break;
+		case '.':
+			Keyboard[0] =  '.' | 0x80;
+			break;
+		case '>':
+			Keyboard[0] =  '>' | 0x80;
+			break;
+		case ',':		// ,
+			Keyboard[0] =  ',' | 0x80;
+			break;
+		case '£':
+			Keyboard[0] =  0x41 | 0x80;
+			break;
+		case '@':
+			Keyboard[0] =  0 | 0x80;
+			break;
+		case '=':
+			Keyboard[0] =  '=' | 0x80;
+			break;
+		case '-':
+			Keyboard[0] =  '-' | 0x80;
+			break;
+		case '+':
+			Keyboard[0] =  '+' | 0x80;
+			break;
+		case ']':
+			Keyboard[0] =  ']' | 0x80;
+			break;
+		case ';':
+			Keyboard[0] =  ';' | 0x80;
+			break;
+		case '[':
+			Keyboard[0] =  '[' | 0x80;
+			break;
+		case ':':
+			Keyboard[0] =  ':' | 0x80;
+			break;
+		case '?':
+			Keyboard[0] =  '?' | 0x80;
+			break;
+		case '/':
+			Keyboard[0] =  '/' | 0x80;
+			break;
+		case '*':
+			Keyboard[0] =  '*' | 0x80;
+			break;
+		case '\r':
+			Keyboard[0] =  0x0d | 0x80;
+			break;
+		case 0x1:     // home
+			Keyboard[0] =  0x61 | 0x80;
+			break;
+		case 0x2:     // CRSR right
+			Keyboard[0] =  0x62 | 0x80;
+			break;
+		case 0x3:     // CRSR down
+			Keyboard[0] =  0x63 | 0x80;
+			break;
+		case 0x4:     // DEL
+			Keyboard[0] =  0x64 | 0x80;
+			break;
+		case 0x1f:    // LShift (dice che shift-lock è pure qua...)???
+			Keyboard[0] =  0x65 | 0x80;
+			break;
+		case 0x1e:    // RShift
+			Keyboard[0] =  0x66 | 0x80;
+			break;
+		case 0x1d:    // Ctrl
+			Keyboard[0] =  0x67 | 0x80;
+			break;
+		case 0x8:    // backspace
+			Keyboard[0] =  0x68 | 0x80;
+			break;
+		case 0x1b:     // ESC , gestire
+			Keyboard[0] =  0x69 | 0x80;
+			break;
+      // finire alcuni tasti mancanti, togliere..
+		case 0x1c:     // apple??
+			Keyboard[0] =  0x6a | 0x80;
+			break;
+		case 0xf1:    // F1
+			Keyboard[0] =  0x6b | 0x80;
+			break;
+		case 0xf3:    // F3
+			Keyboard[0] =  0x6c | 0x80;
+			break;
+		case 0xf5:    // F5
+			Keyboard[0] =  0x6d | 0x80;
+			break;
+		case 0xf7:    // F7
+			Keyboard[0] =  0x6e | 0x80;
+			break;
+		}
+#endif
   }
 
 #ifdef __PIC32
-void __ISR(_TIMER_3_VECTOR,ipl4AUTO) TMR_ISR(void) {
+void __ISR(_TIMER_3_VECTOR,ipl4SRS) TMR_ISR(void) {
 // https://www.microchip.com/forums/m842396.aspx per IRQ priority ecc
   static BYTE divider,dividerVICpatch;
   static BYTE keysFeedPhase=0;
 
 //  LED2 ^= 1;      // check timing: 1600Hz, 9/11/19 (fuck berlin day))
-  
+
+#ifdef COMMODORE64
   divider++;
   if(divider>=32) {   // 50 Hz per TOD
     divider=0;
@@ -2492,7 +3156,80 @@ fine_tasti:
         }
       }
     }
+#endif
+
+#ifdef APPLE2
+  if(keysFeedPtr==255)      // EOL
+    goto fine;
+  if(keysFeedPtr==254) {    // NEW string
+    keysFeedPtr=0;
+    keysFeedPhase=0;
+		switch(whichKeysFeed) {
+			case 0:
+				strcpy(keysFeed,keysFeed1);
+				break;
+			case 1:
+				strcpy(keysFeed,keysFeed2);
+				break;
+			case 2:
+				strcpy(keysFeed,keysFeed3);
+				break;
+			case 3:
+				strcpy(keysFeed,keysFeed4);
+				break;
+			case 4:
+				strcpy(keysFeed,keysFeed5);
+				break;
+			}
+		whichKeysFeed++;
+		if(whichKeysFeed>4)
+			whichKeysFeed=0;
+    }
+
+  if(keysFeed[keysFeedPtr]) {
+    dividerEmulKbd++;
+#if defined(__PIC32MM__)
+    if(dividerEmulKbd>=500) {   // ~.5Hz per emulazione tastiera! 
+#else
+    if(dividerEmulKbd>=300) {   // ~.2Hz per emulazione tastiera! (più veloce di tot non va...))
+#endif
+      dividerEmulKbd=0;
+      if(!keysFeedPhase) {
+        keysFeedPhase=1;
+        emulateKBD(keysFeed[keysFeedPtr]);
+        }
+      else {
+        dividerEmulKbd=0;
+        keysFeedPtr++;
+fine_tasti:
+        keysFeedPhase=0;
+        emulateKBD(NULL);
+        }
+      }
+    }
+  else
+    keysFeedPtr=255;
+#endif
+
+#ifdef AMICO2000
+  if(keysFeed[keysFeedPtr]) {
+    dividerEmulKbd++;
+    if(dividerEmulKbd>=250) {   // ~.2Hz per emulazione tastiera! (più veloce di tot non va...))
+      dividerEmulKbd=0;
+      if(!keysFeedPhase) {
+        keysFeedPhase=1;
+        emulateKBD(keysFeed[keysFeedPtr]);
+        }
+      else {
+        keysFeedPhase=0;
+        emulateKBD(NULL);
+        keysFeedPtr++;
+        }
+      }
+    }
+#endif
     
+fine:    
   IFS0CLR = _IFS0_T3IF_MASK;
   }
 

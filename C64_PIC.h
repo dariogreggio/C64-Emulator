@@ -20,6 +20,11 @@
 #endif
 
 
+//#define COMMODORE64 1
+#define APPLE2 1
+//#define AMICO2000
+
+#ifdef COMMODORE64
 #if defined(__PIC32MM__)
 #ifdef USING_SIMULATOR
 #define MAX_RAM 0x6800
@@ -29,7 +34,15 @@
 #else
 #define MAX_RAM 0x10000
 #endif
+#endif
+#ifdef AMICO2000
+#define MAX_RAM 2048
+#endif
+#ifdef APPLE2
+#define MAX_RAM 0x8000      // diciamo...
+#endif
 
+#ifdef COMMODORE64
 //https://www.c64-wiki.com/wiki/raster_time
 //#define REAL_SIZE    
 #define MIN_RASTER 0        // noi visualizziamo da 48 a 248
@@ -50,10 +63,18 @@
 #if defined(__PIC32MM__)
 #define VERT_OFFSCREEN 18       // (240-200) 
 #endif
+#endif
+#ifdef APPLE2
+#define HORIZ_SIZE (40*8)      // 
+#define VERT_SIZE (24*8)
+#endif
+#ifdef AMICO2000
+#endif
 
 
 #if defined(__PIC32MM__)
-#define FCY 24000000ul    //Oscillator frequency; 
+#define FCY 32000000ul    //24000000ul    //Oscillator frequency; 
+#warning vERIFICARE 2022
 #else
 #define FCY 205000000ul    //Oscillator frequency; ricontrollato con baud rate, pare giusto così!
 #endif
@@ -63,10 +84,11 @@
 #define PERIPHERAL_CLOCK_HZ      (FCY/2 /*100000000UL*/)    // Peripheral Bus  in Hz
 #define GetSystemClock()         (FCY)    // CPU Clock Speed in Hz
 #define GetPeripheralClock()     (PERIPHERAL_CLOCK_HZ)    // Peripheral Bus  in Hz
+#define FOSC 8000000ul
 
 #define US_TO_CT_TICKS  (CPU_CT_HZ/1000000UL)    // uS to CoreTimer Ticks
     
-#define VERNUML 6
+#define VERNUML 11
 #define VERNUMH 1
 
 
@@ -136,11 +158,22 @@ void ShortDelay(DWORD DelayCount);
 #define ClrWdt() { WDTCONbits.WDTCLRKEY=0x5743; }
 #endif
 
+#ifdef COMMODORE64
 extern const unsigned char C64kern[];
 extern const unsigned char C64basic[];
 extern const unsigned char C64char[];
 extern const unsigned char C64cartridge[];
-
+#endif
+#ifdef APPLE2
+extern const unsigned char AppleROM_D0[],AppleROM_E0[],AppleROM_E8[],AppleROM_F0[],AppleROM_F8[];
+extern const unsigned char AppleChar[];
+#endif
+#ifdef AMICO2000
+extern const unsigned char Amico2000_rom1[],Amico2000_rom2[];
+extern const unsigned char rom_asteroidi[];
+extern const unsigned char rom_labirinto[];
+extern const unsigned char rom_atterraggiolunare[];
+#endif
 
 void Timer_Init(void);
 void PWM_Init(void);
