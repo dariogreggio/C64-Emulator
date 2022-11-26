@@ -333,7 +333,7 @@ const char CopyrightString[]= {'A','p','p','l','e',']','[',' ','E','m','u','l','
 const char CopyrightString[]= {'A','m','i','c','o','2','0','0','0',' ','E','m','u','l','a','t','o','r',' ','v',
 #endif
 
-	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '2','5','/','1','1','/','2','2', 0 };
+	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '2','6','/','1','1','/','2','2', 0 };
 
 const char Copyr1[]="(C) Dario's Automation 2019-2022 - G.Dar\xd\xa\x0";
 
@@ -380,9 +380,9 @@ volatile BYTE keysFeedPtr=sizeof(keysFeed)-1;
 const char *keysFeed2="10 PRINT 5*2\r20 TEXT\rLIST\rRUN\r";
 const char *keysFeed1="PRINT 512,476\r";   // 
 const char *keysFeed3="HOME:PRINT 25003000\r";   // 
-const char *keysFeed4="PRINT FRE(0),15,3*7 \r";   // 
+const char *keysFeed4="PRINT FRE(0),15,3*7: REM CALL -151\r";   // 
 //const char *keysFeed5="PRONT\r";   //
-const char *keysFeed5="15 HGR:HCOLOR=3\r20 HPLOT 108,4 TO 170,4 TO 213,47 TO 213,110\rRUN\r";
+const char *keysFeed5="15 HGR:HCOLOR=3\r20 HPLOT 100,4 TO 170,5 TO 171,90 TO 90,91 TO 99,3\rRUN\r";
 //const char keysFeed[]="10 PRINT 5*2\rLIST\rRUN\r";
 BYTE whichKeysFeed=0;
 char keysFeed[40]={0};
@@ -1624,14 +1624,14 @@ int PlotDisplay(WORD pos,BYTE ch,BYTE c) {
 #ifdef ILI9341
 #define ROWINI_OFFSET 32
 #endif
-#define REAL_SIZE    1      // diciamo :)
+//#define REAL_SIZE    1      // diciamo :)
 const WORD loresColors[16]={BLACK,RED,BLUE,MAGENTA,GREEN,DARKGRAY,LIGHTBLUE,BRIGHTBLUE,
   BROWN,ORANGE,LIGHTGRAY,LIGHTMAGENTA,LIGHTGREEN,YELLOW,BRIGHTGREEN,WHITE};
 const WORD hiresColors[2][4]={{BLACK,LIGHTGREEN,MAGENTA,WHITE},{BLACK,ORANGE,LIGHTBLUE,WHITE}};
 
 int UpdateScreen(SWORD rowIni, SWORD rowFin) {
 	register int i,j;
-	int k,y1,y2,x2,row1,row2,ofs;
+	int k,y1,y2,x2,row1,row2;
 	register BYTE *p,*p1;
   BYTE ch,color,notinverted;
   static BYTE flashCount;
@@ -1639,7 +1639,7 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
   const int row[24]= {0x0000, 0x0080, 0x0100, 0x0180, 0x0200, 0x0280, 0x0300, // non sono in sequenza..
     0x0380, 0x0028, 0x00A8, 0x0128, 0x01A8, 0x0228, 0x02A8, 0x0328, 0x03A8, 
     0x0050, 0x00D0, 0x0150, 0x01D0, 0x0250, 0x02D0, 0x0350, 0x03D0};
-
+  
   // ci mette circa 50mS ogni passata... 
   
 	// per SPI DMA https://www.microchip.com/forums/m1110777.aspx#1110777
@@ -1649,91 +1649,126 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
   flashCount++;
   flashCount &= 15;
 
-  row1=rowIni;
-  row2=rowFin;
-  y1=row1/8;
-  y2=row2/8;
-  y2=min(y2,VERT_SIZE/8);
 #ifdef REAL_SIZE    
-  x2=160/8;
-  y2=128/8;    // 
   if(rowIni>=128)
     rowIni=128;
   if(rowFin>=128)
     rowFin=128;
+  x2=TFT_WIDTH;
 #else
-  x2=HORIZ_SIZE/8;
-  
+  x2=HORIZ_SIZE;
 #endif
+  row1=rowIni;
+  row2=rowFin;
+  
+#ifndef USE_VGA  
   START_WRITE();
   setAddrWindow(0,rowIni,_width,rowFin-rowIni);
+#endif
   
-  if(LoHiRes & 8) {     // 280*192
+  if(LoHiRes & 8) {     // 280*192 che poi in effetti sono 140!
+    y1=row1;
+    y2=row2;
+    y2=min(y2,VERT_SIZE);
+    
   //https://www.xtof.info/hires-graphics-apple-ii.html
-    if(LoHiRes & 2) {     // mixed mode oppure full graphic
-      }
-    ofs=0;
     for(i=y1; i<y2; i++) {
-        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x2000 : 0x4000)]) + ofs);    // inizio riga corrente
-        
-        // USARE row come in text!
+      if(LoHiRes & 2) {     // mixed mode oppure full graphic
+        if(i==20*8) {
+          i /= 8;
+          y2 /= 8;
+          goto text_mode;
+          }
+        }
+      
+      p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x4000 : 0x2000)]) + row[i/8]);    // inizio riga corrente
         
 #ifdef REAL_SIZE    
-        for(j=0; j<22; j++) {
+      for(j=0; j<22/2 /*x2*/; j++) {
 #else
-        for(j=0; j<40; j++) {
+      for(j=0; j<40/2 /*x2*/; j++) {
 #endif
-          ch=*p1++;
-          color=ch & 0x80 ? 1 : 0;
+        ch=*p1++;
+        color=ch & 0x80 ? 1 : 0;
 
+#ifndef USE_VGA  
 #ifdef REAL_SIZE    
-          writedata16(hiresColors[ch][color]);     // 40x7=280
-          writedata16(hiresColors[ch][color]);     // 
-          writedata16(hiresColors[ch][color]);     // 
-          writedata16(hiresColors[ch][color]);     // 
-          writedata16(hiresColors[ch][color]);     // 
-          writedata16(hiresColors[ch][color]);     // 
-          writedata16(hiresColors[ch][color]);     // 
+        writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 40x7=280
+        writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 
+        writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
+        writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
+        writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
+        writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
+        k=ch;
+        ch=*p1++;
+        color=ch & 0x80 ? 1 : 0;
+        writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000001)]);     // 
+        writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000001)]);     // 
+        writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
+        writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
+        writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
+        writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
+        writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
+        writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
+        for(k=0; k<6; k++)
+          writedata16(BLACK);     // padding 22*7->160
 #else
-          writedata16(hiresColors[ch][color]);     // 40x7=280 -> 160
-          writedata16(hiresColors[ch][color]);     // 
-          writedata16(hiresColors[ch][color]);     // 
-          writedata16(hiresColors[ch][color]);     // 
+        writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 20x7=140
+        writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
+        writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
+        k=ch;
+        ch=*p1++;
+        color=ch & 0x80 ? 1 : 0;
+        writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000010)]);     // 
+        writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
+        writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
+        writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
+        for(k=0; k<20; k++)
+          writedata16(BLACK);     // padding 140->160
 #endif
-
+#else
+#endif
+          
 #ifdef USA_SPI_HW
-          ClrWdt();
+        ClrWdt();
 #endif
     //	writecommand(CMD_NOP);
 
-          }
+        }
         
 #ifndef REAL_SIZE    
-//FINIRE!        if(i==2 || i==4 || i==6)      // 8:5 -> 192:128
-//          i++;
+      if(!(i % 3))      // 3:2 -> 192:128
+        i++;
 #endif
 
-      ofs += 40;
       }
     }
   else if(!(LoHiRes & 1)) {     // 80*40 o 48
+    y1=row1/8;
+    y2=row2/8;
+    y2=min(y2,VERT_SIZE/8);
+    x2=x2/8;
+    
 // https://en.wikipedia.org/wiki/Apple_II_graphics#Low-Resolution_(Lo-Res)_graphics    
     if(LoHiRes & 2) {     // mixed mode oppure full graphic
       }
-    ofs=0;
     for(i=y1; i<y2; i++) {
+      if(LoHiRes & 2) {     // mixed mode oppure full graphic
+        if(i==20*8)
+          goto text_mode;
+        }
       for(k=0; k<3; k++) {      // scanline del carattere da plottare; 40x3=120
-        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x0800 : 0x0400)]) + ofs);    // inizio riga corrente
-        
-        // USARE row come in text!
-        
-        for(j=0; j<40; j++) {
+        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x0800 : 0x0400)]) + row[i]);    // inizio riga corrente
+        for(j=0; j<40 /*x2*/; j++) {
           ch=*p1++;
 
+#ifndef USE_VGA  
           writedata16(loresColors[ch]);     // 40x4=160
           writedata16(loresColors[ch]);     // 
           writedata16(loresColors[ch]);     // 
           writedata16(loresColors[ch]);     // 
+#else
+#endif
 
 #ifdef USA_SPI_HW
           ClrWdt();
@@ -1742,14 +1777,20 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
 
           }
         }
-
-      ofs += 40;
-      if(!((i+1) % 3))      // 3x40pixel ogni 128byte, salto gli ultimi 8
-        ofs+=8;
       }
     }
   else {    // text  https://github-wiki-see.page/m/cc65/wiki/wiki/Apple-II-11a.-Text-Mode  
+    WORD color=BRIGHTGREEN;
+    
+    y1=row1/8;
+    y2=row2/8;
+    y2=min(y2,VERT_SIZE/8);
+    x2=x2/8;
+    
     for(i=y1; i<y2; i++) {
+      
+text_mode:
+          
 #ifdef REAL_SIZE    
       for(k=0; k<8; k++) {      // scanline del carattere da plottare
 #else
@@ -1757,9 +1798,9 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
 #endif
         p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x0800 : 0x0400) + row[i]]));    // carattere a inizio riga corrente
 #ifdef REAL_SIZE    
-        for(j=0; j<160/8; j++) {
+        for(j=0; j<160/8 /*x2*/; j++) {
 #else
-        for(j=0; j<HORIZ_SIZE/8; j++) {
+        for(j=0; j<HORIZ_SIZE/8 /*x2*/; j++) {
 #endif
           ch=*p1++;
           if(ch < 0x40)
@@ -1780,37 +1821,49 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
 
 #ifdef REAL_SIZE    
           if(!notinverted) {
-            writedata16(ch & 0x80 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x40 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x20 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x10 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x8 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x4 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x2 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x1 ? BLACK : BRIGHTGREEN);     // 
+#ifndef USE_VGA  
+            writedata16(ch & 0x80 ? BLACK : color);     // 
+            writedata16(ch & 0x40 ? BLACK : color);     // 
+            writedata16(ch & 0x20 ? BLACK : color);     // 
+            writedata16(ch & 0x10 ? BLACK : color);     // 
+            writedata16(ch & 0x8 ? BLACK : color);     // 
+            writedata16(ch & 0x4 ? BLACK : color);     // 
+            writedata16(ch & 0x2 ? BLACK : color);     // 
+            writedata16(ch & 0x1 ? BLACK : color);     // 
+#else
+#endif
             }
           else {
-            writedata16(ch & 0x80 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x40 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x20 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x10 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x8 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x4 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x2 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x1 ? BRIGHTGREEN : BLACK);     // 
+#ifndef USE_VGA  
+            writedata16(ch & 0x80 ? color : BLACK);     // 
+            writedata16(ch & 0x40 ? color : BLACK);     // 
+            writedata16(ch & 0x20 ? color : BLACK);     // 
+            writedata16(ch & 0x10 ? color : BLACK);     // 
+            writedata16(ch & 0x8 ? color : BLACK);     // 
+            writedata16(ch & 0x4 ? color : BLACK);     // 
+            writedata16(ch & 0x2 ? color : BLACK);     // 
+            writedata16(ch & 0x1 ? color : BLACK);     // 
+#else
+#endif
             }
 #else
           if(!notinverted) {
-            writedata16(ch & 0x80 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x20 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x8 ? BLACK : BRIGHTGREEN);     // 
-            writedata16(ch & 0x2 ? BLACK : BRIGHTGREEN);     // 4:8 -> 320:160
+#ifndef USE_VGA  
+            writedata16(ch & 0x80 ? BLACK : color);     // 
+            writedata16(ch & 0x20 ? BLACK : color);     // 
+            writedata16(ch & 0x8 ? BLACK : color);     // 
+            writedata16(ch & 0x2 ? BLACK : color);     // 4:8 -> 320:160
+#else
+#endif
             }
           else {
-            writedata16(ch & 0x80 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x20 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x8 ? BRIGHTGREEN : BLACK);     // 
-            writedata16(ch & 0x2 ? BRIGHTGREEN : BLACK);     // 4:8 -> 320:160
+#ifndef USE_VGA  
+            writedata16(ch & 0x80 ? color : BLACK);     // 
+            writedata16(ch & 0x20 ? color : BLACK);     // 
+            writedata16(ch & 0x8 ? color : BLACK);     // 
+            writedata16(ch & 0x2 ? color : BLACK);     // 4:8 -> 320:160
+#else
+#endif
             }
 #endif
 
@@ -1830,7 +1883,9 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
       }
     }
   
+#ifndef USE_VGA  
   END_WRITE();
+#endif
     
   LED3 = 0;     // ~50mS  24/11/22
   
@@ -2039,7 +2094,6 @@ int main(void) {
 
 
   
-//    	ColdReset=0;    Emulate(0);
 
 #ifndef USING_SIMULATOR
   
@@ -2127,8 +2181,12 @@ int main(void) {
 			}
   
 #endif
-  
 
+#ifdef USE_VGA  
+  DMA_Init(5 /*7*/,1);    //v.sotto
+#endif
+
+//  ColdReset=1;
   Emulate(0);
 
   }
@@ -2194,6 +2252,115 @@ void myINTEnableSystemMultiVectoredInt(void) {
   asm volatile ("ei");
   //__builtin_enable_interrupts();
   }
+
+#ifdef USE_VGA  
+BYTE __attribute__((coherent)) __attribute__((aligned(16))) videoRAM[320L*200];  
+
+void DMA_Init(WORD tim,BYTE mode) {
+//https://www.microchip.com/forums/m951559.aspx
+// https://www.microchip.com/forums/m1106634.aspx 
+
+  DCH0CONbits.CHEN = 0; // turn off DMA channel 0
+  DMACONbits.ON = 0;  // disable global DMA controller
+  
+  IFS4CLR=_IFS4_DMA0IF_MASK; //clear any pending DMA channel 0 interrupt  
+  
+  DCH0CON = 0x0013;   // channel off, priority 3, no chaining, continuous
+  DCH0ECON = 0;    // no start or stop IRQs, no pattern match
+#ifndef USING_SIMULATOR
+  DCH0SSA = KVA_TO_PA(&videoRAM);  // transfer source physical address
+#else
+  DCH0SSA = &videoRAM;  // transfer source physical address
+#endif
+  DCH0SSIZ = _width;     // source size
+#ifndef USING_SIMULATOR
+  DCH0DSA = KVA_TO_PA(mode ? &LATB : (volatile unsigned int *)&dummyLATB);     // transfer destination physical address
+#else
+  DCH0DSA = mode ? &LATB : (volatile unsigned int *)&dummyLATB;     // transfer destination physical address
+#endif
+  // mi pare che IL MERDOSO SIMULATORE desse DMA-address-error con KVA.. e ok senza, mentre invece SERVE!!
+  DCH0DSIZ = 1;    // destination size 
+  DCH0CSIZ = 1;                   // 1 bytes transferred per event
+  DCH0INT = 0;                    // clear all interrupts
+  //DCH0ECONSET = _ADC_DATA4_VECTOR << _DCH0ECON_CHSIRQ_POSITION;
+  //DCH0ECONSET = _DCH0ECON_SIRQEN_MASK;
+  DCH0ECONbits.CHSIRQ = /*_CORE_TIMER_VECTOR*/ _TIMER_1_VECTOR; 
+//#warning PROVARE 0, core interrupt!!  // https://www.microchip.com/forums/m920711.aspx
+  // bah bisogna gestire il compare... non mi va cmq
+
+  DCH0ECONbits.SIRQEN = 1;  // enable DMA 0 for IRQ trigger
+  
+  //DCH0CONbits.CHCHNS=1;        // Channel 0 chained to start from channel with lower natural priority (channel 1)
+  //DCH0CONbits.CHCHN=1;        // enable chaining     
+  
+  DCH0INTbits.CHSDIE = 1;      // Interrupt when the fill is done.
+//  DCH0INTbits.CHDDIE = 1;      // Interrupt when the fill is done.
+//  DCH0INT=0xff0000;
+  
+  IPC33bits.DMA0IP=5;            // set IPL 5, sub-priority 2??
+  IPC33bits.DMA0IS=0;
+//  IPC33SET = 5 << _IPC33_DMA0IP_POSITION; // 
+//  IPC33SET = 0 << _IPC33_DMA0IS_POSITION; // 
+  IEC4bits.DMA0IE=1;             // enable DMA channel 0 interrupt 
+  //IEC4SET = _IEC4_DMA0IE_MASK; // enable DMA channel 0 interrupts
+
+  
+  // Set Peripheral Bus 3 Clock to SYSCLK/1
+  SYSKEY = 0x00000000; // Start unlock sequence
+  SYSKEY = 0xAA996655;
+  SYSKEY = 0x556699AA;
+  while(PB3DIVbits.PBDIVRDY == 0);
+  PB3DIVbits.PBDIV = 0;   //200MHz per timer
+  PB3DIVbits.ON = 1;
+
+//#warning PROVO PBCLK4 (port I/O) a 200MHz! v. forum
+  while(PB4DIVbits.PBDIVRDY == 0);
+  PB4DIVbits.PBDIV = 0;   //200MHz va un pizzico meglio/più veloce/coerente
+  PB4DIVbits.ON = 1;
+  SYSKEY = 0x33333333;
+   
+  T1CON=0;
+  T1CONbits.TCS = 0;            // clock from peripheral clock; 200MHz = 5nS
+  T1CONbits.TCKPS = 0;          // 1:1 prescaler (DIVERSO dagli altri timer!))
+  PR1 = tim; //GetPeripheralClock2()/GENERATOR_RATE;
+  // vorremmo 800 pixel/riga (inc. sync) in 32uS... farebbe 40nS => 8, ma sotto i 20 non va... con 16 è + lento ecc con 10 impazzisce
+  // v. anche overclock, 208 o 216
+    //19=>95nS; 8=65nS 6=50nS (2/11/21 ... cosa gli gira?!); SERVONO 40!!
+    //  con altri valori tipo 5 o 7 o altro si hanno comportamenti casuali. 16 più o meno va a 80nS; forse 3 è ancora un pelo meno di 50
+  // VALORI LETTI con DMAIRQ ogni 640 (width= 160LCD * 4)
+  //1: 38nS
+  //2: 58nS
+  //3: 38nS
+  //4: 48nS
+  //5: 58nS
+  //6: 50nS
+  //7: 38nS
+  //8: 43nS
+  //9: 48nS
+  //10: 100nS
+  //11: 112nS
+  //12: 125nS
+  //13: 130nS
+  //14: 100nS
+  //15: 76nS
+  //16: 81nS
+  //20: 100nS
+  
+    // https://www.microchip.com/forums/m1106634.aspx 
+  T1CONbits.TON = 1;    // start timer to generate triggers
+  //https://www.aidanmocke.com/blog/2019/01/08/DMA-Intro/
+
+  
+  
+  DCH0CONbits.CHEN = 1; // turn on DMA channel 0
+  DMACONbits.ON = 1;  // enable global DMA controller
+    
+  // https://www.microchip.com/forums/m698095.aspx
+  // per chaining / pingpong..
+  }
+
+#endif
+
 
 /* CP0.Count counts at half the CPU rate */
 #define TICK_HZ (CPU_HZ / 2)
@@ -3233,6 +3400,200 @@ fine:
   IFS0CLR = _IFS0_T3IF_MASK;
   }
 
+#ifdef USE_VGA    
+volatile DWORD vLine;
+    
+void __ISR(_DMA0_VECTOR,ipl5SRS) __attribute__((optimize("unroll-loops"))) DMA_ISR(void) {
+#warning PROVARE IPL7!!
+  static BYTE myVSync=2;
+
+
+/*  LATDINV=0X000F;     		// CHECK Timing!		min=160nS... v. timer
+  DCH0INTCLR = _DCH0INT_CHSDIF_MASK;
+  IFS4CLR = _IFS4_DMA0IF_MASK;  // Clear the interrupt flag!
+  return;*/
+
+
+#warning ********** PER ACCESSI RAM CHE RALLENTANO DMA, PROVARE DMAPRI IN CFGCON
+
+      if(DCH0SSIZ==HORIZ_SYNC_VGA /* 17% circa */) {
+        LATDSET=VHSYNC_MASK;
+        DCH0SSIZ=_width +HORIZ_PORCH_VGA;
+        DCH0SSA = KVA_TO_PA(((BYTE*)&videoRAM)+vLine*DCH0SSIZ);  // transfer source physical address
+        vLine++;
+        
+        switch(myVSync) {
+          case 2:
+            if(vLine>=_height) {   // 
+              vLine=0;
+              myVSync=1;
+              }
+            break;
+          case 1:
+            if(vLine>=VERT_PORCH_VGA) {   // 7% circa; questo DOPO! mentre quello H prima
+              vLine=0;
+        //      VVSync=0;
+        //      VIRQ = 0;
+              LATDCLR=VVSYNC_MASK;
+              myVSync=0;
+              }
+            break;
+          case 0:
+            if(vLine>=VERT_SYNC_VGA) {   // 1% circa
+              vLine=0;
+        //      VVSync=1;
+        //      VIRQ = 1;
+              LATDSET=VVSYNC_MASK;
+              myVSync=2;
+              }
+            break;
+          }
+
+        }
+      else {
+        DCH0SSIZ=HORIZ_SYNC_VGA;
+        LATDCLR=VHSYNC_MASK;
+        }
+      
+
+      
+/* 
+ * SVGA Signal 800 x 600 @ 60 Hz timing
+
+General timing
+Screen refresh rate	60 Hz
+Vertical refresh	37.878787878788 kHz
+Pixel freq.	40.0 MHz
+Horizontal timing (line)
+Polarity of horizontal sync pulse is positive.
+
+Scanline part	Pixels	Time [µs]
+Visible area	800	  20
+Front porch	  40	  1
+Sync pulse	  128	  3.2
+Back porch	  88	  2.2
+Whole line	  1056	26.4
+Vertical timing (frame)
+Polarity of vertical sync pulse is positive.
+
+Frame part	Lines	Time [ms]
+Visible area	600	15.84
+Front porch	  1	  0.0264
+Sync pulse	  4	  0.1056
+Back porch	  23	0.6072
+Whole frame  	628	16.5792
+
+Horizonal Timing
+
+Horizonal Dots         640     640     640        
+Vertical Scan Lines    350     400     480
+Horiz. Sync Polarity   POS     NEG     NEG
+A (us)                 31.77   31.77   31.77     Scanline time
+B (us)                 3.77    3.77    3.77      Sync pulse lenght 
+C (us)                 1.89    1.89    1.89      Back porch
+D (us)                 25.17   25.17   25.17     Active video time
+E (us)                 0.94    0.94    0.94      Front porch
+ i.e. 31.5KHz H freq
+         ______________________          ________
+________|        VIDEO         |________| VIDEO (next line)
+    |-C-|----------D-----------|-E-|
+__   ______________________________   ___________
+  |_|                              |_|
+  |B|
+  |---------------A----------------|
+
+Vertical Timing
+
+Horizonal Dots         640     640     640
+Vertical Scan Lines    350     400     480
+Vert. Sync Polarity    NEG     POS     NEG      
+Vertical Frequency     70Hz    70Hz    60Hz
+O (ms)                 14.27   14.27   16.68     Total frame time
+P (ms)                 0.06    0.06    0.06      Sync length
+Q (ms)                 1.88    1.08    1.02      Back porch
+R (ms)                 11.13   12.72   15.25     Active video time
+S (ms)                 1.2     0.41    0.35      Front porch
+ i.e. 60Hz V freq
+
+         ______________________          ________
+________|        VIDEO         |________|  VIDEO (next frame)
+    |-Q-|----------R-----------|-S-|
+__   ______________________________   ___________
+  |_|                              |_|
+  |P|
+  |---------------O----------------|
+
+		
+
+* "VGA industry standard" 640x480 pixel mode
+
+General characteristics
+
+Clock frequency 25.175 MHz
+Line  frequency 31469 Hz
+Field frequency 59.94 Hz
+
+One line
+
+  8 pixels front porch
+ 96 pixels horizontal sync
+ 40 pixels back porch
+  8 pixels left border
+640 pixels video
+  8 pixels right border
+---
+800 pixels total per line
+
+One field
+
+  2 lines front porch
+  2 lines vertical sync
+ 25 lines back porch
+  8 lines top border
+480 lines video
+  8 lines bottom border
+---
+525 lines total per field              
+
+Other details
+
+Sync polarity: H negative, V negative
+Scan type: non interlaced.
+
+ 
+ * PAL/Composite
+Bandwidth 	5 MHz[5]
+Horizontal sync polarity 	Negative
+Total time for each line 	64 ?s[6][7]
+Front porch (A) 	1.65 +0.4?0.1 ?s
+Sync pulse length (B) 	4.7±0.20 ?s
+Back porch (C) 	5.7±0.20 ?s
+Active video (D) 	51.95 +0.4?0.1 ?s
+(Total horizontal sync time 12.05 µs)
+
+After 0.9 µs a 2.25±0.23 ?s colour burst of 10±1 cycles is sent. Most rise/fall times are in 250±50 ns range. Amplitude is 100% for white level, 30% for black, and 0% for sync.[6] The CVBS electrical amplitude is Vpp 1.0 V and impedance of 75 ?.[8]
+The composite video (CVBS) signal used in systems M and N before combination with a sound carrier and modulation onto an RF carrier.
+
+The vertical timings are:
+Parameter 	Value
+Vertical lines 	312.5 (625 total)
+Vertical lines visible 	288 (576 total)
+Vertical sync polarity 	Negative (burst)
+Vertical frequency 	50 Hz
+Sync pulse length (F) 	0.576 ms (burst)[9]
+Active video (H) 	18.4 ms
+(Total vertical sync time 1.6 ms) 
+*/
+
+
+        
+  DCH0INTCLR = _DCH0INT_CHSDIF_MASK;
+
+  
+  IFS4CLR = _IFS4_DMA0IF_MASK;  // Clear the interrupt flag!
+  }
+#endif
+    
 #endif
 
 #ifdef __PIC32
