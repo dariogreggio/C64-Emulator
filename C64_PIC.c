@@ -333,7 +333,7 @@ const char CopyrightString[]= {'A','p','p','l','e',']','[',' ','E','m','u','l','
 const char CopyrightString[]= {'A','m','i','c','o','2','0','0','0',' ','E','m','u','l','a','t','o','r',' ','v',
 #endif
 
-	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '2','6','/','1','1','/','2','2', 0 };
+	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '2','7','/','1','1','/','2','2', 0 };
 
 const char Copyr1[]="(C) Dario's Automation 2019-2022 - G.Dar\xd\xa\x0";
 
@@ -382,7 +382,8 @@ const char *keysFeed1="PRINT 512,476\r";   //
 const char *keysFeed3="HOME:PRINT 25003000\r";   // 
 const char *keysFeed4="PRINT FRE(0),15,3*7: REM CALL -151\r";   // 
 //const char *keysFeed5="PRONT\r";   //
-const char *keysFeed5="15 HGR:HCOLOR=3\r20 HPLOT 100,4 TO 170,5 TO 171,90 TO 90,91 TO 99,3\rRUN\r";
+//const char *keysFeed5="15 HGR:HCOLOR=3\r20 HPLOT 100,4 TO 170,5 TO 171,90 TO 90,91 TO 99,3\rRUN\r";
+const char *keysFeed5="15 GR:COLOR=4\r20 PLOT 10,4 :COLOR=7: PLOT 17,5\rRUN\r";
 //const char keysFeed[]="10 PRINT 5*2\rLIST\rRUN\r";
 BYTE whichKeysFeed=0;
 char keysFeed[40]={0};
@@ -1663,124 +1664,11 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
   
 #ifndef USE_VGA  
   START_WRITE();
-  setAddrWindow(0,rowIni,_width,rowFin-rowIni);
+  setAddrWindow(0,rowIni,_width,rowFin-rowIni);   // occhio, così e' sbagliato...
 #endif
   
-  if(LoHiRes & 8) {     // 280*192 che poi in effetti sono 140!
-    y1=row1;
-    y2=row2;
-    y2=min(y2,VERT_SIZE);
-    
-  //https://www.xtof.info/hires-graphics-apple-ii.html
-    for(i=y1; i<y2; i++) {
-      if(LoHiRes & 2) {     // mixed mode oppure full graphic
-        if(i==20*8) {
-          i /= 8;
-          y2 /= 8;
-          goto text_mode;
-          }
-        }
-      
-      p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x4000 : 0x2000)]) + row[i/8]);    // inizio riga corrente
-        
-#ifdef REAL_SIZE    
-      for(j=0; j<22/2 /*x2*/; j++) {
-#else
-      for(j=0; j<40/2 /*x2*/; j++) {
-#endif
-        ch=*p1++;
-        color=ch & 0x80 ? 1 : 0;
-
-#ifndef USE_VGA  
-#ifdef REAL_SIZE    
-        writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 40x7=280
-        writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 
-        writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
-        writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
-        writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
-        writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
-        k=ch;
-        ch=*p1++;
-        color=ch & 0x80 ? 1 : 0;
-        writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000001)]);     // 
-        writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000001)]);     // 
-        writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
-        writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
-        writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
-        writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
-        writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
-        writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
-        for(k=0; k<6; k++)
-          writedata16(BLACK);     // padding 22*7->160
-#else
-        writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 20x7=140
-        writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
-        writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
-        k=ch;
-        ch=*p1++;
-        color=ch & 0x80 ? 1 : 0;
-        writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000010)]);     // 
-        writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
-        writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
-        writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
-        for(k=0; k<20; k++)
-          writedata16(BLACK);     // padding 140->160
-#endif
-#else
-#endif
-          
-#ifdef USA_SPI_HW
-        ClrWdt();
-#endif
-    //	writecommand(CMD_NOP);
-
-        }
-        
-#ifndef REAL_SIZE    
-      if(!(i % 3))      // 3:2 -> 192:128
-        i++;
-#endif
-
-      }
-    }
-  else if(!(LoHiRes & 1)) {     // 80*40 o 48
-    y1=row1/8;
-    y2=row2/8;
-    y2=min(y2,VERT_SIZE/8);
-    x2=x2/8;
-    
-// https://en.wikipedia.org/wiki/Apple_II_graphics#Low-Resolution_(Lo-Res)_graphics    
-    if(LoHiRes & 2) {     // mixed mode oppure full graphic
-      }
-    for(i=y1; i<y2; i++) {
-      if(LoHiRes & 2) {     // mixed mode oppure full graphic
-        if(i==20*8)
-          goto text_mode;
-        }
-      for(k=0; k<3; k++) {      // scanline del carattere da plottare; 40x3=120
-        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x0800 : 0x0400)]) + row[i]);    // inizio riga corrente
-        for(j=0; j<40 /*x2*/; j++) {
-          ch=*p1++;
-
-#ifndef USE_VGA  
-          writedata16(loresColors[ch]);     // 40x4=160
-          writedata16(loresColors[ch]);     // 
-          writedata16(loresColors[ch]);     // 
-          writedata16(loresColors[ch]);     // 
-#else
-#endif
-
-#ifdef USA_SPI_HW
-          ClrWdt();
-#endif
-    //	writecommand(CMD_NOP);
-
-          }
-        }
-      }
-    }
-  else {    // text  https://github-wiki-see.page/m/cc65/wiki/wiki/Apple-II-11a.-Text-Mode  
-    WORD color=BRIGHTGREEN;
+  if(LoHiRes & 1) {     // text  https://github-wiki-see.page/m/cc65/wiki/wiki/Apple-II-11a.-Text-Mode  
+    WORD color;
     
     y1=row1/8;
     y2=row2/8;
@@ -1790,13 +1678,14 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
     for(i=y1; i<y2; i++) {
       
 text_mode:
+      color=BRIGHTGREEN;
           
 #ifdef REAL_SIZE    
       for(k=0; k<8; k++) {      // scanline del carattere da plottare
 #else
       for(k=0; k<8; k++) {      // scanline del carattere da plottare
 #endif
-        p1=(((BYTE*)&ram_seg[(LoHiRes & 8 ? 0x0800 : 0x0400) + row[i]]));    // carattere a inizio riga corrente
+        p1=((BYTE*)&ram_seg[(LoHiRes & 4 ? 0x0800 : 0x0400) + row[i]]);    // carattere a inizio riga corrente
 #ifdef REAL_SIZE    
         for(j=0; j<160/8 /*x2*/; j++) {
 #else
@@ -1880,6 +1769,138 @@ text_mode:
 
         }
 
+      }
+    }
+  else {      // graphics
+    if(LoHiRes & 8) {     // 280*192 che poi in effetti sono 140!
+      y1=row1;
+      y2=row2;
+      y2=min(y2,VERT_SIZE);
+
+    //https://www.xtof.info/hires-graphics-apple-ii.html
+      for(i=y1; i<y2; i++) {
+        if(LoHiRes & 2) {     // mixed mode oppure full graphic
+          if(i>=20*8) {
+            i /= 8;
+            y2 /= 8;
+            goto text_mode;
+            }
+          }
+
+        p1=((BYTE*)&ram_seg[(LoHiRes & 4 ? 0x4000 : 0x2000)]) + row[i/8] + (0x400*(i & 7));    // inizio riga corrente
+
+#ifdef REAL_SIZE    
+        for(j=0; j<22/2 /*x2*/; j++) {
+#else
+        for(j=0; j<40/2 /*x2*/; j++) {
+#endif
+          ch=*p1++;
+          color=ch & 0x80 ? 1 : 0;
+
+#ifndef USE_VGA  
+#ifdef REAL_SIZE    
+          writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 40x7=280
+          writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 
+          writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
+          writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
+          writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
+          writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
+          k=ch;
+          ch=*p1++;
+          color=ch & 0x80 ? 1 : 0;
+          writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000001)]);     // 
+          writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000001)]);     // 
+          writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
+          writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
+          writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
+          writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
+          writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
+          writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
+          for(k=0; k<6; k++)
+            writedata16(BLACK);     // padding 22*7->160
+#else
+          writedata16(hiresColors[color][(ch & 0b00000011) >> 0]);     // 20x7=140
+          writedata16(hiresColors[color][(ch & 0b00001100) >> 2]);     // 
+          writedata16(hiresColors[color][(ch & 0b00110000) >> 4]);     // 
+          k=ch;
+          ch=*p1++;
+          color=ch & 0x80 ? 1 : 0;
+          writedata16(hiresColors[color][((k & 0b01000000) >> 6) | (ch & 0b00000010)]);     // 
+          writedata16(hiresColors[color][(ch & 0b00000110) >> 1]);     // 
+          writedata16(hiresColors[color][(ch & 0b00011000) >> 3]);     // 
+          writedata16(hiresColors[color][(ch & 0b01100000) >> 5]);     // 
+#endif
+#else
+#endif
+
+#ifdef USA_SPI_HW
+          ClrWdt();
+#endif
+      //	writecommand(CMD_NOP);
+
+          }
+
+#ifndef USE_VGA  
+#ifdef REAL_SIZE    
+        for(k=0; k<6; k++)
+          writedata16(BLACK);     // padding 22*7->160
+#else
+        for(k=0; k<20; k++)
+          writedata16(BLACK);     // padding 140->160
+#endif
+#endif
+
+#ifndef REAL_SIZE 
+        if(!(i % 3))      // 3:2 -> 192:128
+          i++;
+#endif
+
+        }
+      }
+    else {     // 80*40 o 48
+      y1=row1/4;
+      y2=row2/4;
+      y2=min(y2,VERT_SIZE/4);
+      x2=x2/8;
+
+  // https://en.wikipedia.org/wiki/Apple_II_graphics#Low-Resolution_(Lo-Res)_graphics    
+      for(i=y1; i<y2; i++) {
+        if(LoHiRes & 2) {     // mixed mode oppure full graphic
+          if(i>=40) {
+            i /= 2;
+            y2 /= 2;
+            goto text_mode;
+            }
+          }
+        for(k=0; k < (2+(i & 1)); k++) {      // scanline del carattere da plottare; 48x2.5=120
+          p1=((BYTE*)&ram_seg[(LoHiRes & 4 ? 0x0800 : 0x0400)]) + row[i/2];    // inizio riga corrente
+          for(j=0; j<40 /*x2*/; j++) {
+            ch=*p1++;
+
+#ifndef USE_VGA  
+            if(i & 1) {   // provare, verificare...
+              writedata16(loresColors[ch >> 4]);     // 40x4=160
+              writedata16(loresColors[ch >> 4]);     // 
+              writedata16(loresColors[ch >> 4]);     // 
+              writedata16(loresColors[ch >> 4]);     // 
+              }
+            else {
+              writedata16(loresColors[ch & 0xf]);     // 40x4=160
+              writedata16(loresColors[ch & 0xf]);     // 
+              writedata16(loresColors[ch & 0xf]);     // 
+              writedata16(loresColors[ch & 0xf]);     // 
+              }
+#else
+#endif
+
+#ifdef USA_SPI_HW
+            ClrWdt();
+#endif
+      //	writecommand(CMD_NOP);
+
+            }
+          }
+        }
       }
     }
   

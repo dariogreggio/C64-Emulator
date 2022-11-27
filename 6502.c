@@ -57,7 +57,7 @@ extern volatile BYTE keysFeedPtr;
 #endif
 
 #ifdef APPLE2
-extern volatile BYTE *keysFeedPtr;
+extern volatile BYTE keysFeedPtr;
 extern const char keysFeed[];
 #endif
 
@@ -245,6 +245,7 @@ int Emulate(int mode) {
 #endif
     
 #ifdef APPLE2
+        static BYTE oldSW2;
         if(!SW1) {       // test tastiera, me ne frego del repeat/rientro :)
 //          keysFeedPtr=&keysFeed;
           if(keysFeedPtr==255)
@@ -259,6 +260,15 @@ int Emulate(int mode) {
           UpdateScreen(0,24*8);
 #endif
           }
+
+        if(!SW2) {
+          if(oldSW2) {
+            DoNMI=1;    // solo sul fronte! o si blocca/sovraccarica
+            oldSW2=0;
+            }
+          }
+        else
+          oldSW2=1;
 #endif
     
 

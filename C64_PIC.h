@@ -23,6 +23,7 @@
 //#define COMMODORE64 1
 #define APPLE2 1
 //#define AMICO2000
+//#define USE_VGA 1     // finire... v.PC_PIC con DAC ecc
 
 #ifdef COMMODORE64
 #if defined(__PIC32MM__)
@@ -194,8 +195,8 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin);
 #define LED1 LATEbits.LATE2
 #define LED2 LATEbits.LATE3
 #define LED3 LATEbits.LATE4
-#define SW1  PORTDbits.RD2
-#define SW2  PORTDbits.RD3
+#define SW1  PORTDbits.RD3
+#define SW2  PORTDbits.RD2
 
 
 // pcb SDRradio 2019
@@ -249,6 +250,23 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin);
 #define	m_LCDSTRBit LATBbits.LATB4        // non è chiaro... m_A3_out; in pratica è WRITE
 
 #define	m_LCDCSBit  LATBbits.LATB2
+#endif
+
+#ifdef USE_VGA
+#define HORIZ_SYNC_VGA 70
+#define HORIZ_PORCH_VGA 28    // gestirlo come un altro case nell'IRQ diventa troppo lento e instabile, così "rubo" alcuni pixel e mi sposto a dx (tanto RAM ce n'è, pure a 800x600 in caso)
+#define VERT_SYNC_VGA 8
+#define VERT_PORCH_VGA 30
+#define HORIZ_SYNC_COMP 28
+#define HORIZ_PORCH_COMP 0 //FARE!
+#define VERT_PORCH_COMP 24
+
+#define VHSync LATDbits.LATD2
+#define VHSYNC_MASK 0x0004
+#define VVSync LATDbits.LATD1
+#define VVSYNC_MASK 0x0002
+
+void DMA_Init(WORD tim,BYTE mode);
 #endif
 
 #endif
