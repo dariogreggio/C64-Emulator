@@ -28,10 +28,6 @@ extern SWORD VICRaster;
 extern BYTE VIA1RegR[16], VIA1RegW[16];
 extern BYTE VIA2RegR[16], VIA2RegW[16];
 #endif
-#ifdef CPU_KIMKLONE   // https://laughtonelectronics.com/Arcana/KimKlone/Kimklone_intro.html
-BYTE K[4];
-BYTE IP,W;
-#endif
 
 BYTE DoIRQ=0,DoNMI=0,DoReset=1,DoHalt=0;
 BYTE ColdReset=1;
@@ -76,6 +72,12 @@ extern volatile BYTE keysFeedPtr;
 #ifdef APPLE2
 extern volatile BYTE keysFeedPtr;
 extern const char keysFeed[];
+#endif
+
+#ifdef CPU_KIMKLONE   // https://laughtonelectronics.com/Arcana/KimKlone/Kimklone_intro.html
+BYTE _K[4];
+union RESULT _IP,_W;
+BYTE *theK;
 #endif
 
 
@@ -561,7 +563,11 @@ int Emulate(int mode) {
       continue;   // chissà se dovrebbe saltare NMI/IRQ o no... boh
       }
       
+#ifndef CPU_KIMKLONE
 		switch(GetPipe(_pc++)) {
+#else
+		switch(GetPipeExt(_pc++)) {
+#endif
 			case 0:
 				stack_seg[_s--]=HIBYTE(_pc);
 				stack_seg[_s--]=LOBYTE(_pc);
@@ -586,7 +592,7 @@ int Emulate(int mode) {
 
 			case 2:     // halt and catch fire :D opp. SINC
 #ifdef CPU_KIMKLONE
-        IP++;
+        _IP.w++;
 #else
 //				wsprintf(myBuf,"Istruzione HALT AND CATCH FIRE a %04x: %02x",_pc-1,GetValue(_pc-1));
 //				SetWindowText(hStatusWnd,myBuf);
@@ -651,6 +657,8 @@ int Emulate(int mode) {
 
 #ifdef CPU_KIMKLONE
 			case 0x0b:    // LDK2
+        _K[2]=GetValue(Pipe2.word);
+				_pc+=2;
 				break;
 #endif
 
@@ -715,6 +723,7 @@ aggTrb:
 #endif
 #ifdef CPU_KIMKLONE    //https://laughtonelectronics.com/Arcana/KimKlone/KK%20Instruction%20List.html
 			case 0x13:    // JMP_K3
+        
 				break;
 #endif
 
@@ -766,6 +775,8 @@ aggTrb:
 
 #ifdef CPU_KIMKLONE
 			case 0x1b:    // PLYIPL
+				_IP.b.l=_y=stack_seg[++_s];
+				goto aggFlagY;
 				break;
 #endif
 
@@ -807,10 +818,11 @@ aggTrb:
 
 #ifdef CPU_KIMKLONE    //https://laughtonelectronics.com/Arcana/KimKlone/KK%20Instruction%20List.html
       case 0x22:    // DINC
-        IP+=2;
+        _IP.w+=2;
         break;
         
 			case 0x23:    // JSR_K3
+				_pc+=2;
 				break;
 #endif
 
@@ -870,6 +882,8 @@ aggBit:
 
 #ifdef CPU_KIMKLONE
 			case 0x2b:    // PLYIPH
+				_IP.b.h=_y=stack_seg[++_s];
+				goto aggFlagY;
 				break;
 #endif
 
@@ -932,6 +946,7 @@ aggBit:
 
 #ifdef CPU_KIMKLONE
 			case 0x33:    // SCAN_K3
+
 				break;
 #endif
 
@@ -984,9 +999,11 @@ aggBit:
         
 #ifdef CPU_KIMKLONE
 			case 0x3b:    // NEXT
+        res3.w=_IP.w;
+        _IP.w+=2;
+				_pc=res3.w;
 				break;
 #endif
-
 
 			case 0x3d:
 				_a &= GetValue(Pipe2.word+_x);
@@ -1028,12 +1045,17 @@ aggBit:
 
 #ifdef CPU_KIMKLONE
 			case 0x42:    // LDK1
+				_K[1]=Pipe2.bytes.byte1;
+				_pc++;
 				break;
 
 			case 0x43:    // K3_
+        theK=&_K[3];
 				break;
 
 			case 0x44:    // LDK2
+        _K[2]=ram_seg[Pipe2.bytes.byte1];
+				_pc++;
 				break;
 #endif
 
@@ -1077,6 +1099,7 @@ aggBit:
 
 #ifdef CPU_KIMKLONE
 			case 0x4b:    // PUSHK0
+				stack_seg[_s--]=_K[0];
 				break;
 #endif
 
@@ -1129,8 +1152,12 @@ aggBit:
 
 #ifdef CPU_KIMKLONE
 			case 0x53:    // PLYK3
+				_K[3]=_y=stack_seg[++_s];
+				goto aggFlagY;
 				break;
 			case 0x54:    // LDK1
+        _K[1]=ram_seg[Pipe2.bytes.byte1+_x];
+				_pc++;
 				break;
 #endif
 
@@ -1174,11 +1201,15 @@ aggBit:
 
 #ifdef CPU_KIMKLONE
 			case 0x5b:    // PUSHK3
+				stack_seg[_s--]=_K[3];
 				break;
 #endif
 
 #ifdef CPU_KIMKLONE
 			case 0x5c:    // K0<>K3
+        res3.b.l=_K[0];
+        _K[0]=_K[3];
+        _K[3]=res3.b.l;
 				break;
 #endif
 
@@ -1219,6 +1250,8 @@ aggBit:
 
 #ifdef CPU_KIMKLONE
 			case 0x63:    // PLYK1
+				_K[1]=_y=stack_seg[++_s];
+				goto aggFlagY;
 				break;
 #endif
 
@@ -1317,6 +1350,7 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0x6b:    // PUSHK1
+				stack_seg[_s--]=_K[1];
 				break;
 #endif
 
@@ -1380,6 +1414,8 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0x73:    // PLYK2
+				_K[2]=_y=stack_seg[++_s];
+				goto aggFlagY;
 				break;
 #endif
 
@@ -1421,7 +1457,7 @@ aggFlagA:
 				break;
 
 #ifdef CPU_65C02
-			case 0x7a:
+			case 0x7a:    // PLY
 				_y=stack_seg[++_s];
 				goto aggFlagY;
 				break;
@@ -1433,6 +1469,7 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0x7b:    // PUSHK2
+				stack_seg[_s--]=_K[2];
 				break;
 #endif
 
@@ -1476,6 +1513,7 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0x83:    // K1_
+        theK=&_K[1];
 				break;
 #endif
 
@@ -1521,6 +1559,7 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0x8b:    // TSB_K1
+
 				break;
 #endif
 
@@ -1567,6 +1606,8 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0x93:    // STA_K1
+//        PutValue(Pipe2.word,_K[2]);
+        _pc+=2;
 				break;
 #endif
 
@@ -1608,6 +1649,7 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0x9b:    // TRB_K1
+
 				break;
 #endif
 
@@ -1657,6 +1699,7 @@ aggFlagA:
 
 #ifdef CPU_KIMKLONE
 			case 0xa3:    // STA_K1
+
 				break;
 #endif
 
@@ -1707,6 +1750,7 @@ aggFlagX:
 
 #ifdef CPU_KIMKLONE
 			case 0xab:    // TSB_K1
+
 				break;
 #endif
 
@@ -1757,6 +1801,7 @@ aggFlagX:
 
 #ifdef CPU_KIMKLONE
 			case 0xb3:    // STA_K1
+				_pc++;
 				break;
 #endif
 
@@ -1802,6 +1847,7 @@ aggFlagX:
 
 #ifdef CPU_KIMKLONE
 			case 0xbb:    // TRB_K1
+				_pc++;
 				break;
 #endif
 
@@ -1845,9 +1891,12 @@ aggFlagX:
 
 #ifdef CPU_KIMKLONE
 			case 0xc2:    // LDK2
+				_K[2]=Pipe2.bytes.byte1;
+				_pc++;
 				break;
 
 			case 0xc3:    // K2_
+        theK=&_K[2];
 				break;
 #endif
 
@@ -1908,6 +1957,7 @@ aggFlagI:
 #endif
 #ifdef CPU_KIMKLONE
 			case 0xcb:    // LDAW
+				_pc++;
 				break;
 #endif
 
@@ -1960,8 +2010,12 @@ aggFlagI:
 
 #ifdef CPU_KIMKLONE
 			case 0xd3:    // LDA_K2
+//        _K[2]=GetValue(Pipe2.word);
+        _pc+=2;
 				break;
 			case 0xd4:    // LDK2
+        _K[2]=ram_seg[Pipe2.bytes.byte1+_x];
+				_pc++;
 				break;
 #endif
 
@@ -2006,8 +2060,11 @@ aggFlagI:
 
 #ifdef CPU_KIMKLONE
 			case 0xdb:    //STAW
+				_pc++;
 				break;
 			case 0xdc:    // LDK1
+        _K[1]=GetValue(Pipe2.word);
+				_pc+=2;
 				break;
 #endif
 
@@ -2046,8 +2103,11 @@ aggFlagI:
 
 #ifdef CPU_KIMKLONE
 			case 0xe2:    // LDK3
+				_K[3]=Pipe2.bytes.byte1;
+				_pc++;
 				break;
 			case 0xe3:    // LDA_K2
+				_pc++;
 				break;
 #endif
 
@@ -2118,11 +2178,12 @@ aggSottr:
 				goto aggFlagA;
 				break;
 
-			case 0xea:
+			case 0xea:    // NOP
 				break;
 
 #ifdef CPU_KIMKLONE
 			case 0xeb:    // RTS_K3
+        
 				break;
 #endif
 
@@ -2153,7 +2214,7 @@ aggSottr:
 				break;
 #endif
 
-			case 0xf0:
+			case 0xf0:    // BEQ
 				if(_p.Zero)
 					_pc+=(signed char)Pipe2.bytes.byte1;
 				_pc++;
@@ -2175,8 +2236,11 @@ aggSottr:
 
 #ifdef CPU_KIMKLONE
 			case 0xf3:    // LDA_K2
+				_pc++;
 				break;
 			case 0xf4:    // LDK3
+        _K[3]=ram_seg[Pipe2.bytes.byte1+_x];
+				_pc++;
 				break;
 #endif
 
@@ -2219,8 +2283,11 @@ aggSottr:
 
 #ifdef CPU_KIMKLONE
 			case 0xfb:    // RTI_K3
+        
 				break;
 			case 0xfc:    // LDK3
+        _K[3]=GetValue(Pipe2.word);
+				_pc+=2;
 				break;
 #endif
 

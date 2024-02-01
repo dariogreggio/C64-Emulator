@@ -72,6 +72,44 @@ BYTE ColorRAM[1024];
 BYTE ColorRAM[1024],VideoHIRAM[((HORIZ_SIZE/2)+(HORIZ_OFFSCREEN*2))*(MAX_RASTER-MIN_RASTER+1) /* /8 FARE */];
 #endif
 BYTE Keyboard[8]={255,255,255,255,255,255,255,255};
+extern volatile BYTE CIA1IRQ,CIA2IRQ,VICIRQ;
+#endif
+
+#ifdef COMMODOREVIC20
+BYTE VICReg[16] = {
+  0x00,0x00,0x80,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  };
+SWORD VICRaster=MIN_RASTER;
+BYTE SIDReg[32] = {
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  };
+BYTE VIA1RegR[16]  = {
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  },
+  VIA1RegW[16] = {
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  };
+BYTE VIA2RegR[16] = {
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  },
+  VIA2RegW[16] = {
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  };
+#if defined(__PIC32MM__)
+BYTE ColorRAM[1024];
+#else
+BYTE ColorRAM[1024];
+#endif
+BYTE Keyboard[8]={255,255,255,255,255,255,255,255};
+extern volatile BYTE VIA1IRQ,VIA2IRQ;
 #endif
 
 #ifdef AMICO2000
@@ -116,10 +154,14 @@ union __attribute__((__packed__)) RESULT {
     } b;
   WORD w;
   };
-volatile BYTE CIA1IRQ,CIA2IRQ,VICIRQ;
 
 extern volatile BYTE *keysFeedPtr;
 extern const char keysFeed[];
+
+#ifdef CPU_KIMKLONE   // https://laughtonelectronics.com/Arcana/KimKlone/Kimklone_intro.html
+extern BYTE _K[4];
+extern BYTE *theK;
+#endif
 
 
 BYTE GetValue(SWORD t) {
@@ -133,7 +175,10 @@ BYTE GetValue(SWORD t) {
     if(t <= 0x9fff) {
       if(!(PLAReg[0] & 3)) {    // non è perfetto ma per ora ok
   			if((CPUIOReg[1] & 3) == 3) {
-  				i=C64cartridge[t-0x8000];
+#ifdef USA_CARTRIDGE
+          t &= 0x3fff;
+  				i=C64cartridge[t];
+#endif
           }
         else {
 #if !defined(__PIC32MM__)
@@ -150,7 +195,10 @@ BYTE GetValue(SWORD t) {
     else if(t <= 0xbfff) {
       if(!(PLAReg[0] & 3)) {    // non è perfetto ma per ora ok
   			if(CPUIOReg[1] & 2) {
-  				i=C64cartridge[t-0x8000];
+#ifdef USA_CARTRIDGE
+          t &= 0x3fff;
+  				i=C64cartridge[t];
+#endif
           }
         else {
 #if !defined(__PIC32MM__)
@@ -159,7 +207,8 @@ BYTE GetValue(SWORD t) {
           }
         }
 			else if(CPUIOReg[1] & 1) {
-				i=C64basic[t-0xa000];
+        t &= 0x1fff;
+				i=C64basic[t];
 				}
 			else {
 #if !defined(__PIC32MM__)
@@ -169,7 +218,8 @@ BYTE GetValue(SWORD t) {
 			}
 		else if(t >= 0xe000) {
 			if(CPUIOReg[1] & 2) {
-				i=C64kern[t-0xe000];
+        t &= 0x1fff;
+				i=C64kern[t];
 				}
 			else {
 #if !defined(__PIC32MM__)
@@ -231,14 +281,34 @@ BYTE GetValue(SWORD t) {
 					i=SIDReg[t];
 					}
 				else if((t >= 0xd800) && (t <= 0xdbff)) {
-					t &= 0x3ff;
+          t &= 0x3ff;
 					i=ColorRAM[t];
 					}
 				else if((t >= 0xdc00) && (t <= 0xdcff)) {
 	//    printf("Leggo a %04x: %02x\n",t,CIA1Reg[t & 0xf]);
 					t &= 0xf;
 					switch(t) {
-						case 1:
+/*Write to Port A($DC00)row
+Read from Port B($DC01)column
+
+      7   6   5   4   3   2   1   0
+    --------------------------------
+  7| STP  /   ,   N   V   X  LSH CDN    STP=RUN/STOP, LSH=Left SHIFT, CDN=CRSR-Down
+   |
+  6|  Q  UPA  @   O   U   T   E  F5     UPA=Up Arrow
+   |
+  5| CBM  =   :   K   H   F   S  F3     CBM=Commodore logo
+   |
+  4| SPC RSH  .   M   B   C   Z  F1     RSH=Right SHIFT
+   |
+  3|  2  HOM  -   0   8   6   4  F7     HOM=CLR/HOME
+   |
+  2| CTL  ;   L   J   G   D   A  CRT    CTL=CTRL, CRT=CRSR-Right
+   |
+  1| LFA  *   P   I   Y   R   W  RET    LFA=Left Arrow, RET=RETURN
+   |
+  0|  1  BP   +   9   7   5   3  DEL    BP=British Pound/Lira 
+*/  				case 1:
 							i=0xff;
 							for(j=0,k=1; j<8; j++,k <<= 1) {
 								if(!(CIA1RegR[0] & k)) {
@@ -304,6 +374,196 @@ BYTE GetValue(SWORD t) {
 		}
 #endif
   
+#ifdef COMMODOREVIC20
+	if(t >= 0x8000) {
+    if(t <= 0x8fff) {
+      t &= 0xfff;
+			i=V20char[t];
+      }
+    else if(t <= 0x9fff) {
+      if((t >= 0x9000) && (t <= 0x900f)) {
+        t &= 0xf;
+        switch(t) {
+          case 0x3:                                 //MSB raster
+          case 0x4:                                 //raster
+            VICReg[0x4]=VICRaster >> 1;
+            VICReg[0x3] &= 0x7f;
+            VICReg[0x3] |= (VICRaster & 0x1) << 7;
+            break;
+          case 0x6:                                 //light pen x
+            // da qualche parte dice che b0=1 fisso e il valroe è shiftato sx di 1..
+            break;
+          case 0x7:                                 //light pen y
+            break;
+          case 0x8:
+#if defined(__PIC32MM__)
+            VICReg[t] = ADC1BUF4;     // PADDLE, tanto per...
+#else
+            VICReg[t] = ADCDATA4;     // PADDLE, tanto per...
+#endif
+            break;
+          case 0x9:
+#if defined(__PIC32MM__)
+            VICReg[t] = ADC1BUF0;
+#else
+            VICReg[t] = ADCDATA0;
+#endif
+            break;
+          case 0xa:   // audio-alto
+            break;
+          case 0xb:   // audio-tenor
+            break;
+          case 0xc:   // audio-soprano
+            break;
+          case 0xd:   // audio-noise
+            break;
+  				case 0xe:   // audio-volume, multicolor
+    				break;
+          }
+        i=VICReg[t];
+        }
+      else if((t >= 0x9110) && (t <= 0x911f)) {
+//http://www.zimmers.net/anonftp/pub/cbm/maps/Vic20.MemoryMap.txt
+        t &= 0xf;
+        switch(t) {
+          case 0:   // ORB
+#if defined(__PIC32MM__)
+            VIA1RegR[0] = (VIA1RegR[0] & 0x3f) | (0 & 0x8000 ? 0x40 : 0) | (0 & 0x8000 ? 0x80 : 0);
+#else
+            VIA1RegR[0] = (VIA1RegR[0] & 0x3f) | (PMSTAT & 0x8000 ? 0x40 : 0) | (PMSTAT & 0x8000 ? 0x80 : 0);
+#endif
+          // FINIRE se si vuole!
+            VIA1RegR[0xd] &= ~0x10;
+            if(1)   // v. doc...
+              VIA1RegR[0xd] &= ~0x8;
+            i=VIA1RegR[0];
+            break;
+          case 1:   // ORA
+            VIA1RegR[1] = PORTB & 0xff;
+            VIA1RegR[0xd] &= ~0x2;
+            if(1)   // v. doc...
+              VIA1RegR[0xd] &= ~0x1;
+            i=VIA1RegR[1];
+            break;
+          case 0x04:  // T1 low
+            VIA1RegR[0xd] &= ~0x40;
+            i=VIA1RegR[4];
+            break;
+          case 0x08:  // T2 low
+            VIA1RegR[0xd] &= ~0x20;
+            i=VIA1RegR[8];
+            break;
+          case 0x0a:  // SR
+            VIA1RegR[0xd] &= ~0x4;
+            i=VIA1RegR[10];
+            break;
+          case 0xd:
+            i=VIA1RegR[0xd];
+//            VIA1RegR[0xd] = 0;
+            break;
+          case 0xe:
+            i=VIA1RegR[0xe] | 0x80;
+            break;
+          default:
+            i=VIA1RegR[t];
+            break;
+          }
+        }
+      else if((t >= 0x9120) && (t <= 0x912f)) {
+        t &= 0xf;
+        switch(t) {
+          case 0:   // ORB
+            VIA2RegR[0xd] &= ~0x10;
+            if(1)   // v. doc...
+              VIA2RegR[0xd] &= ~0x8;
+            i=VIA2RegR[0];
+            break;
+/*Write to Port B($9120)column
+Read from Port A($9121)row
+
+     7   6   5   4   3   2   1   0
+    --------------------------------
+  7| F7  F5  F3  F1  CDN CRT RET DEL    CRT=Cursor-Right, CDN=Cursor-Down
+   |
+  6| HOM UA  =   RSH /   ;   *   BP     BP=British Pound, RSH=Should be Right-SHIFT,
+   |                                    UA=Up Arrow
+  5| -   @   :   .   ,   L   P   +
+   |
+  4| 0   O   K   M   N   J   I   9
+   |
+  3| 8   U   H   B   V   G   Y   7
+   |
+  2| 6   T   F   C   X   D   R   5
+   |
+  1| 4   E   S   Z   LSH A   W   3      LSH=Should be Left-SHIFT
+   |
+  0| 2   Q   CBM SPC STP CTL LA  1      LA=Left Arrow, CTL=Should be CTRL, STP=RUN/STOP
+   |                                    CBM=Commodore key 
+*/        case 0x1:   // ORA
+            i=0xff;
+            for(j=0,k=1; j<8; j++,k <<= 1) {
+              if(!(VIA2RegR[0] & k)) {
+                i &= Keyboard[j];
+                }
+              }
+            VIA2RegR[0xd] &= ~0x2;
+            if(1)   // v. doc...
+              VIA2RegR[0xd] &= ~0x1;
+            break;
+          case 0x04:  // T1 low
+            VIA2RegR[0xd] &= ~0x40;
+            i=VIA2RegR[4];
+            break;
+          case 0x08:  // T2 low
+            VIA2RegR[0xd] &= ~0x20;
+            i=VIA2RegR[8];
+            break;
+          case 0x0a:  // SR
+            VIA2RegR[0xd] &= ~0x4;
+            i=VIA2RegR[10];
+            break;
+          case 0xd:
+            VIA2RegR[0xd] |= U1STA & 1 /*URXDA*/ ? 0x10 : 0;			// FLAG, ser. in
+          // FINIRE se si vuole!
+            i=VIA2RegR[0xd];
+//            VIA2RegR[0xd] = 0;
+            break;
+          case 0xe:
+            i=VIA2RegR[0xe] | 0x80;
+            break;
+          default:
+            i=VIA2RegR[t];
+            break;
+          }
+        }
+      else if((t >= (0x9400 | ((WORD)VICReg[2] & 0x80)<<2)) && 
+        (t <= (0x95ff | ((WORD)VICReg[2] & 0x80)<<2))) {
+        t &= 0x1ff;
+        i=ColorRAM[t];
+        }
+      }
+    else if(t <= 0xbfff) {
+      t &= 0x1fff;
+#ifdef USA_CARTRIDGE
+      if(SW2)      //
+        i=V20cartridge[t];
+#endif
+			}
+		else if(t <= 0xdfff) {
+      t &= 0x1fff;
+			i=V20basic[t];
+			}
+		else {
+      t &= 0x1fff;
+  		i=V20kern[t];
+			}
+		}
+	else {
+    if(t < MAX_RAM) 
+      i=ram_seg[t];
+		}
+#endif
+
 #ifdef AMICO2000
 	if(t >= 0xfb00) {
 		if(t <= 0xfcff) {
@@ -532,6 +792,12 @@ IWMSELDRV1	$C08A*/
 	return i;
 	}
 
+#ifdef KIMKLONE 
+BYTE GetValueExt(DWORD t) {
+  return GetValue(t);
+	}
+#endif
+
 SWORD GetIntValue(SWORD t) {
 	register SWORD i;
 	char myBuf[128];
@@ -541,8 +807,10 @@ SWORD GetIntValue(SWORD t) {
     if(t <= 0x9fff) {
       if(!(PLAReg[0] & 3)) {    // non è perfetto ma per ora ok
   			if((CPUIOReg[1] & 3) == 3) {
-          t-=0x8000;
+          t &= 0x3fff;
+#ifdef USA_CARTRIDGE
           i=MAKEWORD(C64cartridge[t],C64cartridge[t+1]);
+#endif
           }
         else {
 #if !defined(__PIC32MM__)
@@ -559,8 +827,10 @@ SWORD GetIntValue(SWORD t) {
     else if(t <= 0xbfff) {
       if(!(PLAReg[0] & 3)) {    // non è perfetto ma per ora ok
   			if(CPUIOReg[1] & 2) {
-          t-=0x8000;
+          t &= 0x3fff;
+#ifdef USA_CARTRIDGE
           i=MAKEWORD(C64cartridge[t],C64cartridge[t+1]);
+#endif
           }
         else {
 #if !defined(__PIC32MM__)
@@ -569,7 +839,7 @@ SWORD GetIntValue(SWORD t) {
           }
         }
 			else if(CPUIOReg[1] & 1) {
-				t-=0xa000;
+        t &= 0x1fff;
 				i=MAKEWORD(C64basic[t],C64basic[t+1]);
 				}
 			else {
@@ -580,7 +850,7 @@ SWORD GetIntValue(SWORD t) {
 			}
 		else if(t >= 0xe000) {
 			if(CPUIOReg[1] & 2) {
-				t-=0xe000;
+        t &= 0x1fff;
 				i=MAKEWORD(C64kern[t],C64kern[t+1]);
 				}
 			else {
@@ -601,6 +871,37 @@ SWORD GetIntValue(SWORD t) {
 		}
 #endif
   
+#ifdef COMMODOREVIC20
+	if(t >= 0x8000) {
+    if(t <= 0x8fff) {
+      t &= 0xfff;
+      i=MAKEWORD(V20char[t],V20char[t+1]);
+      }
+    else if(t <= 0x9fff) {  // è lento, ma si gestisce tutto il resto :)
+  		i=MAKEWORD(GetValue(t),GetValue(t+1));
+			}
+    else if(t <= 0xbfff) {
+      t &= 0x1fff;
+#ifdef USA_CARTRIDGE
+      if(SW2)      //
+  			i=MAKEWORD(V20cartridge[t],V20cartridge[t+1]);
+#endif
+			}
+    else if(t <= 0xdfff) {
+      t &= 0x1fff;
+			i=MAKEWORD(V20basic[t],V20basic[t+1]);
+			}
+		else {
+      t &= 0x1fff;
+			i=MAKEWORD(V20kern[t],V20kern[t+1]);
+			}
+		}
+	else {
+    if(t < MAX_RAM) 
+    	i=MAKEWORD(ram_seg[t],ram_seg[t+1]);
+		}
+#endif
+
 #ifdef AMICO2000
 	if(t >= 0xfb00) {
 		if(t <= 0xfcff) {
@@ -706,6 +1007,12 @@ SWORD GetIntValue(SWORD t) {
 	return i;
 	}
 
+#ifdef KIMKLONE 
+SWORD GetIntValueExt(DWORD t) {
+  return GetIntValue(t);
+	}
+#endif
+
 BYTE GetPipe(SWORD t) {
 
 #ifdef COMMODORE64
@@ -713,10 +1020,12 @@ BYTE GetPipe(SWORD t) {
     if(t <= 0x9fff) {
       if(!(PLAReg[0] & 3)) {    // non è perfetto ma per ora ok
   			if((CPUIOReg[1] & 3) == 3) {
-          t-=0x8000;
+          t &= 0x3fff;
+#ifdef USA_CARTRIDGE
           Pipe1=C64cartridge[t++];
           Pipe2.bytes.byte1=C64cartridge[t++];
           Pipe2.bytes.byte2=C64cartridge[t];
+#endif
           }
         else {
           Pipe1=ram_seg[t++];
@@ -735,10 +1044,12 @@ BYTE GetPipe(SWORD t) {
     else if(t <= 0xbfff) {
       if(!(PLAReg[0] & 3)) {    // non è perfetto ma per ora ok
   			if(CPUIOReg[1] & 2) {
-          t-=0x8000;
+          t &= 0x3fff;
+#ifdef USA_CARTRIDGE
           Pipe1=C64cartridge[t++];
           Pipe2.bytes.byte1=C64cartridge[t++];
           Pipe2.bytes.byte2=C64cartridge[t];
+#endif
           }
         else {
 #if !defined(__PIC32MM__)
@@ -749,7 +1060,7 @@ BYTE GetPipe(SWORD t) {
           }
         }
 			else if(CPUIOReg[1] & 1) {
-				t-=0xa000;
+        t &= 0x1fff;
 				Pipe1=C64basic[t++];
 				Pipe2.bytes.byte1=C64basic[t++];
 				Pipe2.bytes.byte2=C64basic[t];
@@ -764,7 +1075,7 @@ BYTE GetPipe(SWORD t) {
 			}
 		else if(t >= 0xe000) {
 			if(CPUIOReg[1] & 2) {
-				t-=0xe000;
+        t &= 0x1fff;
 				Pipe1=C64kern[t++];
 				Pipe2.bytes.byte1=C64kern[t++];
 				Pipe2.bytes.byte2=C64kern[t];
@@ -795,6 +1106,40 @@ BYTE GetPipe(SWORD t) {
 		}
 #endif
   
+#ifdef COMMODOREVIC20
+	if(t >= 0x8000) {
+    if(t <= 0xbfff) {
+      t &= 0x1fff;
+#ifdef USA_CARTRIDGE
+      if(SW2) {     //
+        Pipe1=V20cartridge[t++];
+        Pipe2.bytes.byte1=V20cartridge[t++];
+        Pipe2.bytes.byte2=V20cartridge[t];
+        }
+#endif
+      }
+    else if(t <= 0xdfff) {
+      t &= 0x1fff;
+      Pipe1=V20basic[t++];
+      Pipe2.bytes.byte1=V20basic[t++];
+      Pipe2.bytes.byte2=V20basic[t];
+			}
+		else {
+      t &= 0x1fff;
+      Pipe1=V20kern[t++];
+      Pipe2.bytes.byte1=V20kern[t++];
+      Pipe2.bytes.byte2=V20kern[t];
+			}
+		}
+	else {
+    if(t < MAX_RAM) {
+      Pipe1=ram_seg[t++];
+      Pipe2.bytes.byte1=ram_seg[t++];
+      Pipe2.bytes.byte2=ram_seg[t];
+      }
+		}
+#endif
+
 #ifdef AMICO2000
 	if(t >= 0xfb00) {
 		if(t <= 0xfcff) {
@@ -880,6 +1225,12 @@ BYTE GetPipe(SWORD t) {
 	return Pipe1;
 	}
 
+#ifdef KIMKLONE 
+BYTE GetPipeExt(DWORD t) {
+  return GetPipe(t);
+	}
+#endif
+
 void PutValue(SWORD t,BYTE t1) {
 	register SWORD i;
 	BYTE *video;
@@ -929,7 +1280,7 @@ void PutValue(SWORD t,BYTE t1) {
   			}
 			}
 		else if((t >= 0xd800) && (t <= 0xdbff)) {
-			t &= 0x3ff;
+      t &= 0x3ff;
 			ColorRAM[t]=t1;
 			}
 		else if((t >= 0xdc00) && (t <= 0xdcff)) {
@@ -979,6 +1330,221 @@ void PutValue(SWORD t,BYTE t1) {
 		}
 #endif
 
+#ifdef COMMODOREVIC20
+	if((t >= 0x9000) && (t <= 0x9fff)) {
+		if(t <= 0x900f) {
+      t &= 0xf;
+			VICReg[t]=t1;
+			switch(t) {
+				case 0xa:   // audio-alto
+#define PAL_PHI (4433618UL/4)
+#define NTSC_PHI (14318181UL/14) 
+          if(VICReg[0xa] & 0x80) {   //b7=on-off
+            if(VICReg[0xa]<255) {   //
+              j=PAL_PHI/256/(255-VICReg[0xa]);
+              if(!j)
+                j=1;
+              j=(390625 /*v. timer2*/ )/j;
+              PR2 = j;		 // 
+#if defined(__PIC32MM__)
+              CCP4RA=j/2;
+#else
+              OC1RS = j/2;		 // 
+#endif
+              }
+            }
+          else {
+#if defined(__PIC32MM__)
+            CCP4RA=0;
+#else
+            OC1RS =0;		 // 
+#endif
+            }
+          break;
+				case 0xb:   // audio-tenor
+          if(VICReg[0xb] & 0x80) {   //b7=on-off
+            if(VICReg[0xb]<255) {
+              j=PAL_PHI/128/(255-VICReg[0xb]);
+              if(!j)
+                j=1;
+              j=(390625 /*v. timer2*/ )/j;
+              PR2 = j;		 // 
+#if defined(__PIC32MM__)
+              CCP4RA=j/2;
+#else
+              OC1RS = j/2;		 // 
+#endif
+              }
+            }
+          else {
+#if defined(__PIC32MM__)
+            CCP4RA=0;
+#else
+            OC1RS =0;		 // 
+#endif
+            }
+					break;
+				case 0xc:   // audio-soprano
+          if(VICReg[0xc] & 0x80) {   //b7=on-off
+            if(VICReg[0xc]<255) {
+              j=PAL_PHI/64/(255-VICReg[0xc]);
+              if(!j)
+                j=1;
+              j=(390625 /*v. timer2*/ )/j;
+              PR2 = j;		 // 
+#if defined(__PIC32MM__)
+              CCP4RA=j/2;
+#else
+              OC1RS =j/2;		 // 
+#endif
+              }
+            }
+          else {
+#if defined(__PIC32MM__)
+            CCP4RA=0;
+#else
+            OC1RS =0;		 // 
+#endif
+            }
+					break;
+				case 0xd:   // audio-noise
+          if(VICReg[0xd] & 0x80) {   //b7=on-off
+            if(VICReg[0xd]<255) { 
+              j=PAL_PHI/32/(255-VICReg[0xd]);
+              if(!j)
+                j=1;
+              j=(390625 /*v. timer2*/ )/j;
+              PR2 = j;		 // 
+#if defined(__PIC32MM__)
+              CCP4RA=j/2;
+#else
+              OC1RS = j/2;		 // 
+#endif
+              }
+            }
+          else {
+#if defined(__PIC32MM__)
+            CCP4RA=0;
+#else
+            OC1RS =0;		 // 
+#endif
+            }
+					break;
+				case 0xe:   // audio-volume, multicolor
+					break;
+				}
+			}
+		else if((t >= 0x9110) && (t <= 0x911f)) {
+//printf("Scrivo a %04x: %02x\n",t,t1);
+      t &= 0xf;
+      switch(t) {
+        case 0:   // ORB
+          VIA1RegR[0xd] &= ~0x10;
+          if(1)   // v. doc...
+            VIA1RegR[0xd] &= ~0x8;
+    			VIA1RegR[0]=VIA1RegW[0]=t1;
+  				LATB = (LATB & 0xff00) | t1;
+          break;
+        case 1:   // ORA
+          VIA1RegR[0xd] &= ~0x2;
+          if(1)   // v. doc...
+            VIA1RegR[0xd] &= ~0x1;
+    			VIA1RegR[1]=VIA1RegW[1]=t1;
+#if defined(__PIC32MM__)
+  				(t1 & 0x10 ? 2 : 0) | (t1 & 0x20 ? 8 : 0) | (t1 & 0x8 ? 1 : 0);    // FINIRE!
+#else
+  				PMMODE=(t1 & 0x10 ? 2 : 0) | (t1 & 0x20 ? 8 : 0) | (t1 & 0x8 ? 1 : 0);    // FINIRE!
+#endif
+          break;
+        case 0x05:  // T1 high
+          VIA1RegR[0xd] &= ~0x40;
+    			VIA1RegW[5]=t1;
+          break;
+        case 0x09:  // T2 high
+          VIA1RegR[0xd] &= ~0x20;
+    			VIA1RegW[9]=t1;
+          break;
+        case 0x0a:  // SR
+          VIA1RegR[0xd] &= ~0x4;
+    			VIA1RegR[10]=VIA1RegW[10]=t1;
+          break;
+        case 0xd:   // IFR
+    			VIA1RegW[0xd] = t1;   // 
+    			VIA1RegR[0xd] &= ~(t1 & 0x7f);   // 
+          break;
+        case 0xe:   // IER
+          if(t1 & 0x80)
+            VIA1RegW[0xe] |= t1 & 0x7f;   //
+          else
+            VIA1RegW[0xe] &= ~(t1 & 0x7f);   //
+          break;
+        default:
+    			VIA1RegR[t]=VIA1RegW[t]=t1;
+          break;
+        }
+      if(VIA1RegR[0xd] & 0x7f)
+        VIA1RegR[0xd] |= 0x80;
+      else
+        VIA1RegR[0xd] &= ~0x80;
+			}
+		else if((t >= 0x9120) && (t <= 0x912f)) {
+      t &= 0xf;
+      switch(t) {
+        case 0:
+          VIA2RegR[0xd] &= ~0x10;
+          if(1)   // v. doc...
+            VIA2RegR[0xd] &= ~0x8;
+    			VIA2RegR[0]=VIA2RegW[0]=t1;
+          break;
+        case 1:
+          VIA2RegR[0xd] &= ~0x2;
+          if(1)   // v. doc...
+            VIA2RegR[0xd] &= ~0x1;
+    			VIA2RegR[1]=VIA2RegW[1]=t1;
+          break;
+        case 0x05:  // T1 high
+          VIA2RegR[0xd] &= ~0x40;
+    			VIA2RegW[5]=t1;
+          break;
+        case 0x09:  // T2 high
+          VIA2RegR[0xd] &= ~0x20;
+    			VIA2RegW[9]=t1;
+          break;
+        case 0x0a:  // SR
+          VIA2RegR[0xd] &= ~0x4;
+    			VIA2RegR[10]=VIA1RegW[10]=t1;
+          break;
+        case 0xd:   // IFR
+    			VIA2RegW[0xd] = t1;   // 
+    			VIA2RegR[0xd] &= ~(t1 & 0x7f);   // 
+          break;
+        case 0xe:   // IER
+          if(t1 & 0x80)
+            VIA2RegW[0xe] |= t1 & 0x7f;   //
+          else
+            VIA2RegW[0xe] &= ~(t1 & 0x7f);   //
+          break;
+        default:
+    			VIA2RegR[t]=VIA2RegW[t]=t1;
+          break;
+        }
+      if(VIA2RegR[0xd] & 0x7f)
+        VIA2RegR[0xd] |= 0x80;
+      else
+        VIA2RegR[0xd] &= ~0x80;
+			}
+    else if((t >= (0x9400 | ((WORD)VICReg[2] & 0x80)<<2)) && 
+      (t <= (0x95ff | ((WORD)VICReg[2] & 0x80)<<2))) {
+      t &= 0x1ff;
+      ColorRAM[t]=t1;
+      }
+		}
+	else {
+    if(t < MAX_RAM)
+      ram_seg[t]=t1;
+		}
+#endif
+
 #ifdef AMICO2000
 	if(t >= 0xfd00 && t <= 0xfd03) {
 //printf("Scrivo a %04x: %02x\n",t,t1);
@@ -988,7 +1554,7 @@ void PutValue(SWORD t,BYTE t1) {
         CIA8255RegR[0]=CIA8255RegW[0]=t1;
         if(!(CIA8255RegW[3] & 0b00010000)) {   // se in scrittura
           if(CIA8255RegW[1]>=8) {
-      LED2 ^= 1;      // test timing, refresh completo ogni ~400uS, 13/11/19
+      LED3 ^= 1;      // test timing, refresh completo ogni ~400uS, 13/11/19
             i=(CIA8255RegW[1] >> 1) & 15;    // posizione mux, 4..9 in uscita dal CIA che però è x2 (B1..B4)
             i-=4;
             i=min(5,i);
@@ -1161,3 +1727,9 @@ IWMSELDRV1	$C08A*/
   
 	}
 
+#ifdef KIMKLONE 
+void PutValueExt(DWORD t,BYTE t1) {
+  
+  PutValue(t,t1);
+	}
+#endif

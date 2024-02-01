@@ -209,6 +209,11 @@ int decodeKBD(int, long, BOOL);
 BYTE GetValue(SWORD);
 SWORD GetIntValue(SWORD);
 void PutValue(SWORD, BYTE);
+#ifdef CPU_KIMKLONE
+BYTE GetValueExt(DWORD);
+SWORD GetIntValueExt(DWORD);
+void PutValueExt(DWORD, BYTE);
+#endif
 int Emulate(int);
 
 void __delay_ms(unsigned int);
