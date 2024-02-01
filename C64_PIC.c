@@ -326,16 +326,22 @@
 #ifdef COMMODORE64
 const char CopyrightString[]= {'C','6','4',' ','E','m','u','l','a','t','o','r',' ','v',
 #endif
+#ifdef COMMODOREVIC20
+const char CopyrightString[]= {'V','I','C','2','0',' ','E','m','u','l','a','t','o','r',' ','v',
+#endif
 #ifdef APPLE2
 const char CopyrightString[]= {'A','p','p','l','e',']','[',' ','E','m','u','l','a','t','o','r',' ','v',
 #endif
 #ifdef AMICO2000
 const char CopyrightString[]= {'A','m','i','c','o','2','0','0','0',' ','E','m','u','l','a','t','o','r',' ','v',
 #endif
+#ifdef KIMKLONE
+const char CopyrightString[]= {'K','i','m','K','l','o','n','e',' ','E','m','u','l','a','t','o','r',' ','v',
+#endif
 
-	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '2','7','/','1','1','/','2','2', 0 };
+	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '0','1','/','0','2','/','2','4', 0 };
 
-const char Copyr1[]="(C) Dario's Automation 2019-2022 - G.Dar\xd\xa\x0";
+const char Copyr1[]="(C) Dario's Automation 2019-2024 - G.Dar\xd\xa\x0";
 
 
 
@@ -359,6 +365,20 @@ extern BYTE PLAReg[1];
 extern BYTE Keyboard[8];
 extern volatile BYTE CIA1IRQ,CIA2IRQ,VICIRQ;
 #endif
+#ifdef COMMODOREVIC20
+#if defined(__PIC32MM__)
+extern BYTE ColorRAM[1024];
+#else
+extern BYTE ColorRAM[1024];
+#endif
+extern BYTE VICReg[16];
+extern SWORD VICRaster;
+extern BYTE SIDReg[32];
+extern BYTE VIA1RegR[16],VIA1RegW[16];
+extern BYTE VIA2RegR[16],VIA2RegW[16];
+extern BYTE Keyboard[8];
+extern volatile BYTE VIA1IRQ,VIA2IRQ,VICrfsh;
+#endif
 #ifdef AMICO2000
 extern BYTE Keyboard[4];
 #endif
@@ -369,6 +389,11 @@ extern BYTE LoHiRes;
 
 #ifdef COMMODORE64
 const char keysFeed[]="10 PRINT TI:?\r20 POKE 53281,2\rPOKE 54273,100\rLIST\rRUN\r";
+volatile BYTE *keysFeedPtr=NULL;
+#endif
+#ifdef COMMODOREVIC20
+const char keysFeed[]="10 PRINT TI:?\r20 POKE 36879,8+2\rPOKE 36875,192\rLIST\rRUN\r";
+//const char keysFeed[]="0123456789\rA\r \r";
 volatile BYTE *keysFeedPtr=NULL;
 #endif
 #ifdef AMICO2000
@@ -1205,11 +1230,17 @@ skippa:
   
 	}
 #endif
+#ifdef COMMODOREVIC20
+const WORD textColors[16]={BLACK,WHITE,RED,CYAN,MAGENTA,GREEN,BLUE,YELLOW,
+	ORANGE,BROWN,BRIGHTRED,DARKGRAY,GRAY128,LIGHTGREEN,BRIGHTCYAN,LIGHTGRAY};
+#endif
 #ifdef APPLE2
 #endif
-#else
+#else		// PIC32MM/VNC
 
 #ifdef COMMODORE64
+const WORD textColors[16]={BLACK,WHITE,RED,CYAN,MAGENTA,GREEN,BLUE,YELLOW,
+	ORANGE,BROWN,BRIGHTRED,DARKGRAY,GRAY128,LIGHTGREEN,BRIGHTCYAN,LIGHTGRAY};
 int PlotChar(DWORD pos,WORD ch,BYTE c) {
 	BYTE *p,*p1;
   BYTE c1h,c1l,c2h,c2l;
@@ -1536,8 +1567,8 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
   //	writecommand(CMD_NOP);
 #endif
     
-#if defined(__PIC32MM__)
-		m2m_wifi_handle_events(NULL);
+#if defined(__PIC32MM__) // qua??
+//		m2m_wifi_handle_events(NULL);
 #endif
 
     
@@ -1550,6 +1581,278 @@ int UpdateScreen(SWORD rowIni, SWORD rowFin) {
 #endif
 #endif
 
+#ifdef COMMODOREVIC20
+	// http://tinyvga.com/6561
+const WORD textColors[16]={BLACK,WHITE,BRIGHTRED,BRIGHTCYAN,BRIGHTMAGENTA,BRIGHTGREEN,BRIGHTBLUE,BRIGHTYELLOW,
+	ORANGE,BROWN,LIGHTRED,DARKGRAY,GRAY128,LIGHTGREEN,LIGHTCYAN,LIGHTGRAY};
+
+//#define REAL_SIZE    1      // diciamo :)
+
+#ifdef ST7735
+#define ROWINI_OFFSET 0
+#endif
+#ifdef ILI9341
+#define ROWINI_OFFSET 0
+#endif
+int UpdateScreen(SWORD rowIni, SWORD rowFin) {
+	register int i,j;
+	int k,y1,y2,x1,x2,row1,row2;
+	int px,py;
+	register BYTE *p,*p1;
+	BYTE *psc;
+  BYTE ch;
+  BYTE c1,c2;
+  BYTE imagex,imagey,borderx,bordery;
+
+  // ci mette circa 1mS ogni passata... dovrebbe essere la metà... (viene chiamata circa 25-30 volte al secondo e ora siamo a 40mS invece di 20, 8/11/19)
+  
+	// per SPI DMA https://www.microchip.com/forums/m1110777.aspx#1110777
+
+#ifdef ST7735
+  
+#ifndef REAL_SIZE
+  imagex=VICReg[0x2] & 0x7f;
+  imagey=(VICReg[0x3] >> 1) & 0x3f;
+  borderx=VICReg[0x0] & 0x7f;
+  bordery=VICReg[0x1];
+  
+  if(!rowIni) {   // dovrebbero essere VICReg[1] righe...
+    START_WRITE();
+    setAddrWindow(0,0,_width,bordery/6);
+    for(py=0; py<bordery/6; py++) {
+      for(px=0; px<_width; px++) {
+        if(!(VICReg[0xf] & 0x8))     // INVERTIRE SCHERMO!
+          writedata16(~textColors[VICReg[0xf] & 0x7]);
+        else
+          writedata16(textColors[VICReg[0xf] & 0x7]);  //colore bordo... 
+        }
+      }
+    END_WRITE();
+    }
+        
+  if(!imagex || !imagey) {
+    START_WRITE();
+    setAddrWindow(0,bordery/6,_width,bordery/6+((VERT_SIZE*5)/8));
+    for(py=0; py<((VERT_SIZE*5)/8); py++) {
+      for(px=0; px<_width; px++) {
+        if(!(VICReg[0xf] & 0x8))     // INVERTIRE SCHERMO!
+          writedata16(~textColors[VICReg[0xf] & 0x7]);
+        else
+          writedata16(textColors[VICReg[0xf] & 0x7]);  //colore bordo... 
+        }
+      }
+    END_WRITE();
+    goto fine_bordo;
+    }
+    
+
+  LED3 = 1;
+
+  row1=rowIni-ROWINI_OFFSET;
+  row2=rowFin-ROWINI_OFFSET;
+  y1=row1/8;  /*VICReg[0x1]  ofs V*/ 
+//        y1=max(y1,0);
+  y2=row2/8;
+  y2=min(y2,imagey);
+  x1=/*borderx*/ 0;
+  x2=min(HORIZ_SIZE/8,imagex);
+  START_WRITE();
+  setAddrWindow(0,6+(row1*5)/8,_width,6+(row2*5)/8);
+  for(py=y1; py<y2; py++) {
+    for(k=0; k<8; k++) {
+/*      if(VICReg[2] & 0x80)    // v. anche     VICReg[0xf] ??
+        p1=((BYTE *) ram_seg)+0x1e00;  
+      else
+        p1=((BYTE *)ram_seg)+0x1000;
+//	VICReg[0x5] & 0xf0     // video area pos...
+  */
+      p1=((BYTE *)ram_seg) + 
+       (((VICReg[0x5] & 0x80) ? 0x0000 : 0x8000 /*??*/) | ((((WORD)VICReg[0x5] & 0x70)) << 6) 
+       | ((((WORD)VICReg[2] & 0x80)) << 2));
+      p1+=(py*imagex);
+      psc=((BYTE *)ColorRAM) + (py*imagex);
+      for(px=0; px<borderx/4; px++) {   // normalmente 12, ce ne stanno 3!
+        if(!(VICReg[0xf] & 0x8))
+          writedata16(~textColors[VICReg[0xf] & 0x7]);
+        else
+          writedata16(textColors[VICReg[0xf] & 0x7]);
+        }
+      for(px=x1; px<x2; px++) {
+        if((VICReg[0x5] & 0xf) == 0)   // char map pos...
+          p=((BYTE *)&V20char)+((*p1 << 3)+k);
+        else
+          p=((BYTE *)ram_seg) + 
+            (((VICReg[0x5] & 8) ? 0x0000 : 0x8000) | ((((WORD)VICReg[0x5] & 7)) << 10) 
+            +((*p1 << 3) + k));
+          
+        // if(VICReg[0x3] & 1) double size char...
+        ch=*p;
+        
+        if(*psc & 0x8) {			 // multicolor FARE
+          c1=*psc & 0x7;
+          c2=(VICReg[0xf] & 0xf0) >> 4;
+          
+          switch(ch & 0xc0) {
+            case 0:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);    // 176 => 154
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);
+              break;
+            case 0x40:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+              break;
+            case 0x80:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+              break;
+            case 0xc0:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+              break;
+            }
+          switch(ch & 0x30) {
+            case 0:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);    // 176 => 154
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);
+              break;
+            case 0x10:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+              break;
+            case 0x20:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+              break;
+            case 0x30:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+              break;
+            }
+          switch(ch & 0xc) {
+            case 0:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);    // 176 => 154
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);
+              break;
+            case 0x4:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+              break;
+            case 0x8:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+              break;
+            case 0xc:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+              break;
+            }
+          switch(ch & 0x3) {
+            case 0:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);    // 176 => 154
+//              writedata16((VICReg[0xf] & 0x8) ? textColors[c2] : ~textColors[c2]);
+              break;
+            case 0x1:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+//              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xf] & 0x7] : ~textColors[VICReg[0xf] & 0x7]);
+              break;
+            case 0x2:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+//              writedata16((VICReg[0xf] & 0x8) ? textColors[c1] : ~textColors[c1]);
+              break;
+            case 0x3:
+              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+//              writedata16((VICReg[0xf] & 0x8) ? textColors[VICReg[0xe] >> 4] : ~textColors[VICReg[0xe] >> 4]);
+              break;
+            }
+          }
+        else {
+          c1=*psc & 0x7;
+          c2=(VICReg[0xf] & 0xf0) >> 4;
+          if(!(VICReg[0xf] & 0x8)) {    // INVERTIRE SCHERMO!
+            writedata16(ch & 0x80 ? ~textColors[c1] : ~textColors[c2]);    // 176 => 154
+            writedata16(ch & 0x40 ? ~textColors[c1] : ~textColors[c2]);
+            writedata16(ch & 0x20 ? ~textColors[c1] : ~textColors[c2]);
+            writedata16(ch & 0x8 ? ~textColors[c1] : ~textColors[c2]);
+            writedata16(ch & 0x4 ? ~textColors[c1] : ~textColors[c2]);
+            writedata16(ch & 0x2 ? ~textColors[c1] : ~textColors[c2]);
+            writedata16(ch & 0x1 ? ~textColors[c1] : ~textColors[c2]);
+            }
+          else {
+            writedata16(ch & 0x80 ? textColors[c1] : textColors[c2]);    // 176 => 154
+            writedata16(ch & 0x40 ? textColors[c1] : textColors[c2]);
+            writedata16(ch & 0x20 ? textColors[c1] : textColors[c2]);
+            writedata16(ch & 0x8 ? textColors[c1] : textColors[c2]);
+            writedata16(ch & 0x4 ? textColors[c1] : textColors[c2]);
+            writedata16(ch & 0x2 ? textColors[c1] : textColors[c2]);
+            writedata16(ch & 0x1 ? textColors[c1] : textColors[c2]);
+            }
+          }
+        
+        p1++; psc++;
+        }
+      // arrivo a 160... v. anche VICReg[1] & 0x7f...
+      if(borderx<24) {
+        for(px=0; px<6-(borderx/4); px++) {   // normalmente 12, ce ne stanno altri 3!
+          if(!(VICReg[0xf] & 0x8))
+            writedata16(~textColors[VICReg[0xf] & 0x7]);
+          else
+            writedata16(textColors[VICReg[0xf] & 0x7]);
+          }
+        }
+      
+      if(k==1 || k==3 || k==6)      // 8:5 => 184:115
+        k++;
+      }
+    }
+	// avaza una righina, sul 160x128... riempire in qualche modo!
+
+  END_WRITE();
+  
+  if(rowIni>=VERT_SIZE-8) {   // dovrebbero essere VICReg[1] righe...
+fine_bordo:
+    START_WRITE();
+    setAddrWindow(0,_height-6,_width,_height);
+    // SAREBBE da contare fin dove siamo arrivati, tra bordery e image...
+    
+    if(bordery<72) {
+      for(py=0; py<12-(bordery/6); py++) {
+        for(px=0; px<_width; px++) {
+          if(!(VICReg[0xf] & 0x8))     // INVERTIRE SCHERMO!
+            writedata16(~textColors[VICReg[0xf] & 0x7]);
+          else
+            writedata16(textColors[VICReg[0xf] & 0x7]);
+          }
+        }
+      }
+    END_WRITE();
+    }
+    
+#ifdef USA_SPI_HW
+  ClrWdt();
+#endif
+  
+    
+#else
+  
+#endif
+  
+  //	writecommand(CMD_NOP);
+
+#else
+  START_WRITE();
+    
+  END_WRITE();
+  //	writecommand(CMD_NOP);
+#endif
+
+#ifdef ILI9341
+#endif
+    
+  LED3 = 0;
+
+	}
+
+#endif
 
 #ifdef AMICO2000
 WORD displayColor[3]={BLACK,BRIGHTRED,RED};
@@ -2166,6 +2469,8 @@ int main(void) {
     PLAReg[0]=0;    // cartridge a 8000-bfff, kernel al suo posto
 //    memcpy(&ram_seg[0x8000],&C64cartridge,0x4000);
 #endif
+#ifdef COMMODOREVIC20
+#endif
   
 	ColdReset=1;
 
@@ -2204,7 +2509,7 @@ int main(void) {
 #endif
 
 #ifdef USE_VGA  
-  DMA_Init(5 /*7*/,1);    //v.sotto
+  DMA_Init(18 /* 90uS/pixel, 320 pixel = ~31uS */,1);    //v.sotto
 #endif
 
 //  ColdReset=1;
@@ -2293,7 +2598,13 @@ void DMA_Init(WORD tim,BYTE mode) {
 #else
   DCH0SSA = &videoRAM;  // transfer source physical address
 #endif
-  DCH0SSIZ = _width;     // source size
+#ifdef COMMODORE64
+  DCH0SSIZ = 320;     // source size
+#elif APPLE2
+  DCH0SSIZ = 280;     // source size
+#endif
+#ifdef COMMODOREVIC20
+#endif
 #ifndef USING_SIMULATOR
   DCH0DSA = KVA_TO_PA(mode ? &LATB : (volatile unsigned int *)&dummyLATB);     // transfer destination physical address
 #else
@@ -2756,6 +3067,27 @@ int emulateKBD(unsigned char ch) {
 #ifdef COMMODORE64
 // https://www.c64-wiki.com/wiki/Keyboard
 //	https://github.com/go4retro/c-key/blob/master/src/poll64.c
+/*Write to Port A($DC00)row
+Read from Port B($DC01)column
+
+      7   6   5   4   3   2   1   0
+    --------------------------------
+  7| STP  /   ,   N   V   X  LSH CDN    STP=RUN/STOP, LSH=Left SHIFT, CDN=CRSR-Down
+   |
+  6|  Q  UPA  @   O   U   T   E  F5     UPA=Up Arrow
+   |
+  5| CBM  =   :   K   H   F   S  F3     CBM=Commodore logo
+   |
+  4| SPC RSH  .   M   B   C   Z  F1     RSH=Right SHIFT
+   |
+  3|  2  HOM  -   0   8   6   4  F7     HOM=CLR/HOME
+   |
+  2| CTL  ;   L   J   G   D   A  CRT    CTL=CTRL, CRT=CRSR-Right
+   |
+  1| LFA  *   P   I   Y   R   W  RET    LFA=Left Arrow, RET=RETURN
+   |
+  0|  1  BP   +   9   7   5   3  DEL    BP=British Pound/Lira 
+*/
 	switch(ch) {
     case 0:
       for(i=0; i<8; i++)
@@ -2978,7 +3310,257 @@ int emulateKBD(unsigned char ch) {
 			Keyboard[0] &= 0xbf;
 			break;
 		case 0xf7:    // F7
-			Keyboard[0] &= 0xf7;
+      Keyboard[0] &= 0xf7;
+			break;
+		}
+#endif
+
+#ifdef COMMODOREVIC20
+/*Write to Port B($9120)column
+Read from Port A($9121)row
+
+     7   6   5   4   3   2   1   0
+    --------------------------------
+  7| F7  F5  F3  F1  CDN CRT RET DEL    CRT=Cursor-Right, CDN=Cursor-Down
+   |
+  6| HOM UA  =   RSH /   ;   *   BP     BP=British Pound, RSH=Should be Right-SHIFT,
+   |                                    UA=Up Arrow
+  5| -   @   :   .   ,   L   P   +
+   |
+  4| 0   O   K   M   N   J   I   9
+   |
+  3| 8   U   H   B   V   G   Y   7
+   |
+  2| 6   T   F   C   X   D   R   5
+   |
+  1| 4   E   S   Z   LSH A   W   3      LSH=Should be Left-SHIFT
+   |
+  0| 2   Q   CBM SPC STP CTL LA  1      LA=Left Arrow, CTL=Should be CTRL, STP=RUN/STOP
+   |                                    CBM=Commodore key 
+*/
+	switch(ch) {
+    case 0:
+      for(i=0; i<8; i++)
+        Keyboard[i]=0xff;
+      // FORSE non dovremmo rilasciare i modifier, qua...
+      isCtrlAltCanc=0;
+      break;
+		case ' ':
+			Keyboard[4] &= ~1;
+			break;
+		case 'A':
+			Keyboard[2] &= ~2;
+			break;
+		case 'B':
+			Keyboard[4] &= ~8;
+			break;
+		case 'C':
+			Keyboard[4] &= ~4;
+			break;
+		case 'D':
+			Keyboard[2] &= ~4;
+			break;
+		case 'E':
+			Keyboard[6] &= ~2;
+			break;
+		case 'F':
+			Keyboard[5] &= ~4;
+			break;
+		case 'G':
+			Keyboard[2] &= ~8;
+			break;
+		case 'H':
+			Keyboard[5] &= ~8;
+			break;
+		case 'I':
+			Keyboard[1] &= ~0x10;
+			break;
+		case 'J':
+			Keyboard[2] &= ~0x10;
+			break;
+		case 'K':
+			Keyboard[5] &= ~0x10;
+			break;
+		case 'L':
+			Keyboard[2] &= ~0x20;
+			break;
+		case 'M':
+			Keyboard[4] &= ~0x10;
+			break;
+		case 'N':
+			Keyboard[3] &= ~0x10;
+			break;
+		case 'O':
+			Keyboard[6] &= ~0x10;
+			break;
+		case 'P':
+			Keyboard[1] &= ~0x20;
+			break;
+		case 'Q':
+			Keyboard[6] &= ~1;
+			break;
+		case 'R':
+			Keyboard[1] &= ~4;
+			break;
+		case 'S':
+			Keyboard[5] &= ~2;
+			break;
+		case 'T':
+			Keyboard[6] &= ~4;
+			break;
+		case 'U':
+			Keyboard[6] &= ~8;
+			break;
+		case 'V':
+			Keyboard[3] &= ~8;
+			break;
+		case 'W':
+			Keyboard[1] &= ~2;
+			break;
+		case 'X':
+			Keyboard[3] &= ~4;
+			break;
+		case 'Y':
+			Keyboard[1] &= ~8;
+			break;
+		case 'Z':
+			Keyboard[4] &= ~2;
+			break;
+		case '0':
+			Keyboard[7] &= ~0x10;
+			break;
+		case '!':
+			Keyboard[3] &= ~2;
+		case '1':
+			Keyboard[0] &= ~1;
+			break;
+		case '\"':
+			Keyboard[3] &= ~2;
+		case '2':
+			Keyboard[7] &= ~1;
+			break;
+		case '#':
+			Keyboard[3] &= ~2;
+		case '3':
+			Keyboard[0] &= ~2;
+			break;
+		case '$':
+			Keyboard[3] &= ~2;
+		case '4':
+			Keyboard[7] &= ~2;
+			break;
+		case '%':
+			Keyboard[3] &= ~2;
+		case '5':
+			Keyboard[0] &= ~4;
+			break;
+		case '&':
+			Keyboard[3] &= ~2;
+		case '6':
+			Keyboard[7] &= ~4;
+			break;
+		case '\'':
+			Keyboard[3] &= ~2;
+		case '7':
+			Keyboard[0] &= ~8;
+			break;
+		case '(':
+			Keyboard[3] &= ~2;
+		case '8':
+			Keyboard[7] &= ~8;
+			break;
+		case ')':
+			Keyboard[3] &= ~2;
+		case '9':
+			Keyboard[0] &= ~0x10;
+			break;
+		case '<':
+			Keyboard[3] &= ~2;
+		case '.':
+			Keyboard[4] &= ~0x20;
+			break;
+		case '>':
+			Keyboard[3] &= ~2;
+		case ',':		// ,
+			Keyboard[3] &= ~0x20;		 // ,
+			break;
+		case '£':
+			Keyboard[0] &= ~0x40;
+			break;
+		case '@':
+			Keyboard[6] &= ~0x20;
+			break;
+		case '=':
+			Keyboard[5] &= ~0x40;
+			break;
+		case '-':
+			Keyboard[7] &= ~0x20;
+			break;
+		case '+':
+			Keyboard[0] &= ~0x20;		 // 
+			break;
+		case ']':
+			Keyboard[3] &= ~2;
+		case ';':
+			Keyboard[2] &= ~0x40;		 // 
+			break;
+		case '[':
+			Keyboard[3] &= ~2;
+		case ':':
+			Keyboard[5] &= ~0x20;		 // 
+			break;
+		case '?':
+			Keyboard[3] &= ~2;
+		case '/':
+			Keyboard[3] &= ~0x40;
+			break;
+		case '*':
+			Keyboard[1] &= ~0x40;		 // 
+			break;
+		case '\r':
+			Keyboard[1] &= ~0x80;
+			break;
+		case 0x1:     // home
+			Keyboard[7] &= ~0x40;
+			break;
+		case 0x2:     // CRSR right
+			Keyboard[2] &= ~0x80;
+			break;
+		case 0x3:     // CRSR down
+			Keyboard[3] &= ~0x80;
+			break;
+		case 0x4:     // DEL
+			Keyboard[0] &= ~0x80;
+			break;
+		case 0x1f:    // LShift (dice che shift-lock è pure qua...)
+			Keyboard[3] &= ~2;
+			break;
+		case 0x1e:    // RShift
+			Keyboard[4] &= ~0x40;
+			break;
+		case 0x1d:    // Ctrl
+			Keyboard[2] &= ~1;
+			break;
+		case 0x8:    // backspace
+			Keyboard[0] &= 0xfe;
+			break;
+		case 0x1b:     // ESC , run/stop...
+			Keyboard[3] &= ~1;
+			break;
+		case 0x1c:     // commodore
+			Keyboard[5] &= ~1;
+			break;
+		case 0xf1:    // F1
+			Keyboard[4] &= ~0x80;
+			break;
+		case 0xf3:    // F3
+			Keyboard[5] &= ~0x80;
+			break;
+		case 0xf5:    // F5
+			Keyboard[6] &= ~0x80;
+			break;
+		case 0xf7:    // F7
+			Keyboard[7] &= ~0x80;
 			break;
 		}
 #endif
@@ -3346,6 +3928,46 @@ fine_tasti:
     }
 #endif
 
+#ifdef COMMODOREVIC20
+  divider++;
+  if(divider>=32) {   // 50 Hz per TOD  QUA????
+    divider=0;
+    VIA1IRQ=1;  // non usato (per ora...?
+    }
+
+  dividerVICpatch++;
+  if(dividerVICpatch>50) {    // mmm con 25 non gira più ... strano... vabbe'
+    dividerVICpatch=0;
+    VICrfsh=1;       // refresh screen in 184/8=32 passate, 50?? volte al secondo
+    }
+
+  if(keysFeedPtr) {
+    if(!*keysFeedPtr) {
+      keysFeedPtr=NULL;
+      goto fine_tasti;
+      }
+    dividerEmulKbd++;
+#if defined(__PIC32MM__)
+    if(dividerEmulKbd>=500) {   // ~.5Hz per emulazione tastiera! 
+#else
+    if(dividerEmulKbd>=100) {   // ~.2Hz per emulazione tastiera! (più veloce di tot non va...))
+#endif
+      dividerEmulKbd=0;
+      if(!keysFeedPhase) {
+        keysFeedPhase=1;
+        emulateKBD(*keysFeedPtr);
+        }
+      else {
+        dividerEmulKbd=0;
+        keysFeedPtr++;
+fine_tasti:
+        keysFeedPhase=0;
+        emulateKBD(NULL);
+        }
+      }
+    }
+#endif
+
 #ifdef APPLE2
   if(keysFeedPtr==255)      // EOL
     goto fine;
@@ -3445,7 +4067,13 @@ void __ISR(_DMA0_VECTOR,ipl5SRS) __attribute__((optimize("unroll-loops"))) DMA_I
         
         switch(myVSync) {
           case 2:
-            if(vLine>=_height) {   // 
+#ifdef COMMODORE64
+            if(vLine>=200 /* aggiungere bande..*/) {   // 
+#elif COMMODOREVIC20
+
+#elif APPLE2
+            if(vLine>=192 /* aggiungere bande?*/) {   // 
+#endif
               vLine=0;
               myVSync=1;
               }

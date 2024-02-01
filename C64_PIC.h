@@ -21,9 +21,13 @@
 
 
 //#define COMMODORE64 1
-#define APPLE2 1
+//#define APPLE2 1
 //#define AMICO2000
 //#define USE_VGA 1     // finire... v.PC_PIC con DAC ecc
+//#define COMMODOREVIC20 1
+#define KIMKLONE 1
+
+//#define USA_CARTRIDGE 1
 
 #ifdef COMMODORE64
 #if defined(__PIC32MM__)
@@ -36,12 +40,20 @@
 #define MAX_RAM 0x10000
 #endif
 #endif
+#ifdef COMMODOREVIC20
+#define MAX_RAM 0x2000    // nella versione base 5KB 0x1400 MA C'E' BUCO tra 400 e 1000!! https://www.vic-20.it/la-mappa-di-memoria-del-vic-20/
+#endif
 #ifdef AMICO2000
 #define MAX_RAM 2048
 #endif
 #ifdef APPLE2
 #define MAX_RAM 0x8000      // diciamo...
 #endif
+#ifdef KIMKLONE
+#define MAX_RAM 2048
+#endif
+
+
 
 #ifdef COMMODORE64
 //https://www.c64-wiki.com/wiki/raster_time
@@ -64,6 +76,12 @@
 #if defined(__PIC32MM__)
 #define VERT_OFFSCREEN 18       // (240-200) 
 #endif
+#endif
+#ifdef COMMODOREVIC20
+#define MIN_RASTER 0        // boh
+#define MAX_RASTER 184
+#define HORIZ_SIZE 176      //  
+#define VERT_SIZE 184
 #endif
 #ifdef APPLE2
 #define HORIZ_SIZE (40*8)      // 
@@ -89,7 +107,7 @@
 
 #define US_TO_CT_TICKS  (CPU_CT_HZ/1000000UL)    // uS to CoreTimer Ticks
     
-#define VERNUML 11
+#define VERNUML 12
 #define VERNUMH 1
 
 
@@ -164,6 +182,12 @@ extern const unsigned char C64kern[];
 extern const unsigned char C64basic[];
 extern const unsigned char C64char[];
 extern const unsigned char C64cartridge[];
+#endif
+#ifdef COMMODOREVIC20
+extern const unsigned char V20kern[];
+extern const unsigned char V20basic[];
+extern const unsigned char V20char[];
+extern const unsigned char V20cartridge[];
 #endif
 #ifdef APPLE2
 extern const unsigned char AppleROM_D0[],AppleROM_E0[],AppleROM_E8[],AppleROM_F0[],AppleROM_F8[];

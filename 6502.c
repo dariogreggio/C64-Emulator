@@ -7,9 +7,11 @@
 #include "c64_pic.h"
 
 
+//v. per Ovf metodo usato su 68000 senza byte alto... provare
 
 //https://www.masswerk.at/6502/6502_instruction_set.html
 #undef CPU_65C02
+#define CPU_KIMKLONE
 
 extern BOOL debug;
 extern BYTE ram_seg[MAX_RAM];
@@ -19,6 +21,16 @@ extern BYTE VICReg[64];
 extern SWORD VICRaster;
 extern BYTE CIA1RegR[16], CIA1RegW[16];
 extern BYTE CIA2RegR[16], CIA2RegW[16];
+#endif
+#ifdef COMMODOREVIC20
+extern BYTE VICReg[16];
+extern SWORD VICRaster;
+extern BYTE VIA1RegR[16], VIA1RegW[16];
+extern BYTE VIA2RegR[16], VIA2RegW[16];
+#endif
+#ifdef CPU_KIMKLONE   // https://laughtonelectronics.com/Arcana/KimKlone/Kimklone_intro.html
+BYTE K[4];
+BYTE IP,W;
 #endif
 
 BYTE DoIRQ=0,DoNMI=0,DoReset=1,DoHalt=0;
@@ -45,11 +57,16 @@ union __attribute__((__packed__)) RESULT {
     } b;
   WORD w;
   };
-volatile BYTE CIA1IRQ,CIA2IRQ,VICIRQ;
 
 #ifdef COMMODORE64
 extern volatile BYTE *keysFeedPtr;
 extern const char keysFeed[];
+volatile BYTE CIA1IRQ,CIA2IRQ,VICIRQ;
+#endif
+#ifdef COMMODOREVIC20
+extern volatile BYTE *keysFeedPtr;
+extern const char keysFeed[];
+volatile BYTE VIA1IRQ,VIA2IRQ,VICrfsh;
 #endif
 
 #ifdef AMICO2000
@@ -229,6 +246,50 @@ int Emulate(int mode) {
   
         }
 #endif
+#ifdef COMMODOREVIC20
+      if(VICrfsh) {
+        static BYTE oldSW2;
+        VICrfsh=0;
+  
+        i=VICReg[0x3] << 1;
+        i |= VICReg[0x4] & 0x1;
+        VICRaster+=8;					 	 // raster pos count, 200 al sec...
+        if(VICRaster >= MAX_RASTER /*((VICReg[3] >> 1) & 0x3f)*8*/) {		 // 
+          VICRaster=MIN_RASTER;
+          LED2 ^= 1;      // 50Hz 8/11/19; 70mS su ILI 320x240, 7/8/20; 25mS PIC32MM 17/6/21
+          }
+        
+#ifdef ILI9341
+        static BYTE divider;
+        divider++;
+        if(!(divider & 3))
+#endif
+#if defined(__PIC32MM__)
+        static BYTE divider;
+        divider++;
+        if(divider > 24) {
+          divider=0;
+          UpdateScreen(0,240);
+          }
+#else
+        UpdateScreen(VICRaster,VICRaster+8);
+#endif
+  //      LED3 ^= 1;
+        
+        if(!SW1)        // test tastiera, me ne frego del repeat/rientro :)
+          keysFeedPtr=&keysFeed;
+        
+        if(!SW2) {
+          if(oldSW2) {
+            DoNMI=1;    // solo sul fronte! o si blocca/sovraccarica
+            oldSW2=0;
+            }
+          }
+        else
+          oldSW2=1;
+  
+        }
+#endif
     
 #ifdef AMICO2000
       if(!SW1)        // test tastiera
@@ -325,8 +386,8 @@ int Emulate(int mode) {
             CIA2RegR[0xd] |= 0x81;
             DoNMI=1;
             }
-					CIA2RegR[4]=CIA1RegW[4];
-					CIA2RegR[5]=CIA1RegW[5];
+					CIA2RegR[4]=CIA2RegW[4];
+					CIA2RegR[5]=CIA2RegW[5];
           // e prescaler?
           }
 				else {
@@ -381,6 +442,96 @@ int Emulate(int mode) {
 				}*/
 		  }
 #endif    
+
+#ifdef COMMODOREVIC20
+//Timers
+//https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&ved=2ahUKEwiDgPDZ9uf7AhUFY8AKHfH5AW4QFnoECBQQAQ&url=http%3A%2F%2Farchive.6502.org%2Fdatasheets%2Fmos_6522_preliminary_nov_1977.pdf&usg=AOvVaw0IYOXNYjVcLjosryYWFgpa
+    if(VIA1IRQ) {       // 
+      }
+		// questo gira a 1MHz...
+    if((VIA2RegR[0xb] & 0x40)) {   // finire, capire..
+      if(!MAKEWORD(VIA2RegR[4],VIA2RegR[5])) {
+        if(VIA2RegW[0xe] & 0x40) {
+          VIA2RegR[0xd] |= 0xc0;
+          }
+        if(VIA2RegR[0xb] & 0x80) {
+          // toggle PB7
+          }
+        VIA2RegR[4]=VIA2RegW[4];
+        VIA2RegR[5]=VIA2RegW[5];
+        }
+      else {
+        if(!VIA2RegR[4])
+          VIA2RegR[5]--;
+        VIA2RegR[4]--;
+        }
+      }
+    if(!(VIA2RegR[0xb] & 0x20)) {   // finire, capire..
+      if(!MAKEWORD(VIA2RegR[8],VIA2RegR[9])) {
+        if(VIA2RegW[0xe] & 0x20) {
+          VIA2RegR[0xd] |= 0xa0;
+          }
+        VIA2RegR[8]=VIA2RegW[8];
+        VIA2RegR[9]=VIA2RegW[9];
+        }
+      else {
+        if(!VIA2RegR[8])
+          VIA2RegR[9]--;
+        VIA2RegR[8]--;
+        }
+      }
+		switch(VIA2RegR[0xb] & 0b00011100) {
+      case 0:
+        break;
+      default:    // FARE!!! finire
+    		VIA2RegR[0xa] <<= 1;
+        break;
+      }
+    if((VIA1RegR[0xb] & 0x40)) {   // 
+      if(!MAKEWORD(VIA1RegR[4],VIA1RegR[5])) {
+        if(VIA1RegW[0xe] & 0x40) {
+          VIA1RegR[0xd] |= 0xc0;
+          DoNMI=1;
+          }
+        if(VIA1RegR[0xb] & 0x80) {
+          // toggle PB7
+          }
+        VIA1RegR[4]=VIA1RegW[4];
+        VIA1RegR[5]=VIA1RegW[5];
+        }
+      else {
+        if(!VIA1RegR[4])
+          VIA1RegR[5]--;
+        VIA1RegR[4]--;
+        }
+      }
+    if(!(VIA1RegR[0xb] & 0x20)) {   // finire, capire..
+      if(!MAKEWORD(VIA1RegR[8],VIA1RegR[9])) {
+        if(VIA1RegW[0xe] & 0x20) {
+          VIA1RegR[0xd] |= 0xa0;
+          }
+        VIA1RegR[8]=VIA1RegW[8];
+        VIA1RegR[9]=VIA1RegW[9];
+        }
+      else {
+        if(!VIA1RegR[8])
+          VIA1RegR[9]--;
+        VIA1RegR[8]--;
+        }
+      }
+		switch(VIA1RegR[0xb] & 0b00011100) {
+      case 0:
+        break;
+      default:    // FARE!!! finire
+    		VIA1RegR[0xa] <<= 1;
+        break;
+      }
+    
+    if(VIA2RegR[0xd] & 0x80)
+      DoIRQ=1;
+    if(VIA1RegR[0xd] & 0x80)
+      DoIRQ=1;
+#endif    
     
     LED1 ^= 1;      // ~1uS (CHE CULO!) 8/11/19 ; ~0.75 con ottimizzazione=1 PIC32MZ
     // in effetti la maggior parte delle istruzioni impiega 2-3 cicli, quindi siamo troppo veloci... diciamo di 3x
@@ -433,11 +584,20 @@ int Emulate(int mode) {
 				goto aggFlagA;
 				break;
 
-			case 2:     // halt and catch fire :D
+			case 2:     // halt and catch fire :D opp. SINC
+#ifdef CPU_KIMKLONE
+        IP++;
+#else
 //				wsprintf(myBuf,"Istruzione HALT AND CATCH FIRE a %04x: %02x",_pc-1,GetValue(_pc-1));
 //				SetWindowText(hStatusWnd,myBuf);
+#endif
 				break;
         
+#ifdef CPU_KIMKLONE
+			case 0x3:    // NOP implied 1 cycle
+				break;
+#endif
+
 #ifdef CPU_65C02
 			case 0x04:
 				res2.b.l= _a | ram_seg[Pipe2.bytes.byte1];		// verificare...
@@ -488,6 +648,11 @@ int Emulate(int mode) {
 				_a <<= 1;
 				goto aggFlagA;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0x0b:    // LDK2
+				break;
+#endif
 
 #ifdef CPU_65C02
 			case 0x0c:
@@ -548,6 +713,10 @@ aggTrb:
 				_p.Zero=!res2.b.l;
 				break;
 #endif
+#ifdef CPU_KIMKLONE    //https://laughtonelectronics.com/Arcana/KimKlone/KK%20Instruction%20List.html
+			case 0x13:    // JMP_K3
+				break;
+#endif
 
 			case 0x15:
 				_a |= ram_seg[Pipe2.bytes.byte1+_x];
@@ -595,6 +764,11 @@ aggTrb:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0x1b:    // PLYIPL
+				break;
+#endif
+
 			case 0x1d:
 				_a |= GetValue(Pipe2.word+_x);
 				_pc+=2;
@@ -631,7 +805,16 @@ aggTrb:
 				goto aggFlagA;
 				break;
 
-			case 0x24:
+#ifdef CPU_KIMKLONE    //https://laughtonelectronics.com/Arcana/KimKlone/KK%20Instruction%20List.html
+      case 0x22:    // DINC
+        IP+=2;
+        break;
+        
+			case 0x23:    // JSR_K3
+				break;
+#endif
+
+			case 0x24:    // BIT zp
 				res3.b.l = ram_seg[Pipe2.bytes.byte1];
 				_pc++;
 aggBit:
@@ -685,7 +868,12 @@ aggBit:
 				goto aggFlagA;
 				break;
 
-			case 0x2c:
+#ifdef CPU_KIMKLONE
+			case 0x2b:    // PLYIPH
+				break;
+#endif
+
+			case 0x2c:    // BIT abs
 				res3.b.l = GetValue(Pipe2.word);
 				_pc+=2;
 				goto aggBit;
@@ -742,6 +930,11 @@ aggBit:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0x33:    // SCAN_K3
+				break;
+#endif
+
 			case 0x35:
 				_a &= ram_seg[Pipe2.bytes.byte1+_x];
 				_pc++;
@@ -788,6 +981,12 @@ aggBit:
 				goto aggBit;
 				break;
 #endif
+        
+#ifdef CPU_KIMKLONE
+			case 0x3b:    // NEXT
+				break;
+#endif
+
 
 			case 0x3d:
 				_a &= GetValue(Pipe2.word+_x);
@@ -827,6 +1026,17 @@ aggBit:
 				goto aggFlagA;
 				break;
 
+#ifdef CPU_KIMKLONE
+			case 0x42:    // LDK1
+				break;
+
+			case 0x43:    // K3_
+				break;
+
+			case 0x44:    // LDK2
+				break;
+#endif
+
 			case 0x45:
 				_a ^= ram_seg[Pipe2.bytes.byte1];
 				_pc++;
@@ -864,6 +1074,11 @@ aggBit:
 				_a >>= 1;
 				goto aggFlagA;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0x4b:    // PUSHK0
+				break;
+#endif
 
 			case 0x4c:
 				_pc=Pipe2.word;
@@ -912,6 +1127,13 @@ aggBit:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0x53:    // PLYK3
+				break;
+			case 0x54:    // LDK1
+				break;
+#endif
+
 			case 0x55:
 				_a ^= ram_seg[Pipe2.bytes.byte1+_x];
 				_pc++;
@@ -950,6 +1172,16 @@ aggBit:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0x5b:    // PUSHK3
+				break;
+#endif
+
+#ifdef CPU_KIMKLONE
+			case 0x5c:    // K0<>K3
+				break;
+#endif
+
 			case 0x5d:
 				_a ^= GetValue(Pipe2.word+_x);
 				_pc+=2;
@@ -984,6 +1216,11 @@ aggBit:
 				_pc++;
 				goto aggSomma;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0x63:    // PLYK1
+				break;
+#endif
 
 #ifdef CPU_65C02
 			case 0x64:
@@ -1041,7 +1278,7 @@ aggSomma:
 //				_p.Overflow=((res1.b.l ^ res2.b.l) & 0x80) ? 1 : 0;		
 //        _p.Overflow = !!(res1.b.l & 0x40 + res2.b.l & 0x40) != !!(res1.b.l & 0x80 + res2.b.l & 0x80);
 //        _p.Overflow = ((res1.b.l ^ res3.b.l) & (res2.b.l ^ res3.b.l) & 0x80) ? 1 : 0;
-        _p.Overflow = !!(((res1.b.l & 0x40) + (res2.b.l & 0x40)) & 0x80) != !!(((res1.w & 0x80) + (res2.w & 0x80)) & 0x100);
+//        _p.Overflow = !!(((res1.b.l & 0x40) + (res2.b.l & 0x40)) & 0x80) != !!(((res1.w & 0x80) + (res2.w & 0x80)) & 0x100);
 				/*For addition, operands with different signs never cause overflow. When adding operands
 with similar signs and the result contains a different sign, the Overflow Flag is set, as
 shown in the following example.
@@ -1059,6 +1296,8 @@ ference; the Overflow Flag is set.*/
 				Another C++ formula is !((M^N) & 0x80) && ((M^result) & 0x80). 
 				This means there is overflow if the inputs do not have different signs and the input sign is different from the output sign */ 
         
+        _p.Overflow = !!res3.b.h != !!((res3.b.l & 0x80) ^ (res1.b.l & 0x80) ^ (res2.b.l & 0x80));
+        
 aggFlagA:
 				_p.Zero=_a ? 0 : 1;
 				_p.Minus=_a & 0x80 ? 1 : 0;
@@ -1075,6 +1314,11 @@ aggFlagA:
 					_a &= 0x7f;
 				goto aggFlagA;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0x6b:    // PUSHK1
+				break;
+#endif
 
 			case 0x6c:
 				_pc=GetIntValue(Pipe2.word);
@@ -1134,6 +1378,11 @@ aggFlagA:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0x73:    // PLYK2
+				break;
+#endif
+
 			case 0x75:
 				res2.b.l=ram_seg[Pipe2.bytes.byte1+_x];
 				_pc++;
@@ -1182,6 +1431,11 @@ aggFlagA:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0x7b:    // PUSHK2
+				break;
+#endif
+
 			case 0x7d:
 				res2.b.l=GetValue(Pipe2.word+_x);
 				_pc+=2;
@@ -1219,6 +1473,11 @@ aggFlagA:
 				PutValue(MAKEWORD(ram_seg[Pipe2.bytes.byte1+_x],ram_seg[Pipe2.bytes.byte1+_x+1]),_a);
 				_pc++;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0x83:    // K1_
+				break;
+#endif
 
 			case 0x84:
 				ram_seg[Pipe2.bytes.byte1]=_y;
@@ -1259,6 +1518,11 @@ aggFlagA:
 				_a=_x;
 				goto aggFlagA;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0x8b:    // TSB_K1
+				break;
+#endif
 
 			case 0x8c:
 				PutValue(Pipe2.word,_y);
@@ -1301,6 +1565,11 @@ aggFlagA:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0x93:    // STA_K1
+				break;
+#endif
+
 			case 0x94:
 				ram_seg[Pipe2.bytes.byte1+_x]=_y;
 				_pc++;
@@ -1336,6 +1605,11 @@ aggFlagA:
 			case 0x9a:
 				_s=_x;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0x9b:    // TRB_K1
+				break;
+#endif
 
 #ifdef CPU_65C02
 			case 0x9c:
@@ -1380,6 +1654,11 @@ aggFlagA:
 				_pc++;
 				goto aggFlagX;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0xa3:    // STA_K1
+				break;
+#endif
 
 			case 0xa4:
 				_y=ram_seg[Pipe2.bytes.byte1];
@@ -1426,6 +1705,11 @@ aggFlagX:
 				goto aggFlagX;
 				break;
 
+#ifdef CPU_KIMKLONE
+			case 0xab:    // TSB_K1
+				break;
+#endif
+
 			case 0xac:
 				_y=GetValue(Pipe2.word);
 				_pc+=2;
@@ -1471,6 +1755,11 @@ aggFlagX:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0xb3:    // STA_K1
+				break;
+#endif
+
 			case 0xb4:
 				_y=ram_seg[Pipe2.bytes.byte1+_x];
 				_pc++;
@@ -1511,6 +1800,11 @@ aggFlagX:
 				goto aggFlagX;
 				break;
 
+#ifdef CPU_KIMKLONE
+			case 0xbb:    // TRB_K1
+				break;
+#endif
+
 			case 0xbc:
 				_y = GetValue(Pipe2.word+_x);
 				_pc+=2;
@@ -1548,6 +1842,14 @@ aggFlagX:
 				_pc++;
 				goto aggFlagC;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0xc2:    // LDK2
+				break;
+
+			case 0xc3:    // K2_
+				break;
+#endif
 
 			case 0xc4:
 				res3.w=(SWORD)_y-ram_seg[Pipe2.bytes.byte1];
@@ -1604,6 +1906,10 @@ aggFlagI:
 				// while(!doReset && !doNMI && !doIRQ) ClrWdt();
 				break;
 #endif
+#ifdef CPU_KIMKLONE
+			case 0xcb:    // LDAW
+				break;
+#endif
 
 			case 0xcc:
 				res3.w=(SWORD)_y-GetValue(Pipe2.word);
@@ -1652,6 +1958,13 @@ aggFlagI:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0xd3:    // LDA_K2
+				break;
+			case 0xd4:    // LDK2
+				break;
+#endif
+
 			case 0xd5:
 				res3.w=(SWORD)_a-ram_seg[Pipe2.bytes.byte1+_x];
 				_pc++;
@@ -1691,6 +2004,13 @@ aggFlagI:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0xdb:    //STAW
+				break;
+			case 0xdc:    // LDK1
+				break;
+#endif
+
 			case 0xdd:
 				res3.w=(SWORD)_a - GetValue(Pipe2.word+_x);
 				_pc+=2;
@@ -1723,6 +2043,13 @@ aggFlagI:
 				_pc++;
 				goto aggSottr;
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0xe2:    // LDK3
+				break;
+			case 0xe3:    // LDA_K2
+				break;
+#endif
 
 			case 0xe4:
 				res3.w=(SWORD)_x - GetValue(((SWORD)Pipe2.bytes.byte1));
@@ -1777,12 +2104,27 @@ aggSottr:
 //        _p.Overflow = (res1.b & 0x40 + res2.b & 0x40) != (res1.b & 0x80 + res2.b & 0x80);
 //        _p.Overflow = !!(res1.b.l & 0x40 + res2.b.l & 0x40) != !!(res1.b.l & 0x80 + res2.b.l & 0x80);
 //        _p.Overflow = ((res1.b.l ^ res3.b.l) & (res2.b.l ^ res3.b.l) & 0x80) ? 1 : 0;
-        _p.Overflow = !!(((res1.b.l & 0x40) + (res2.b.l & 0x40)) & 0x80) != !!(((res1.w & 0x80) + (res2.w & 0x80)) & 0x100);
+//        _p.Overflow = !!(((res1.b.l & 0x40) + (res2.b.l & 0x40)) & 0x80) != !!(((res1.w & 0x80) + (res2.w & 0x80)) & 0x100);
+        /*if((res1.b.l & 0x80) != (res2.b.l & 0x80)) {
+          if(((res1.b.l & 0x80) && !(res3.b.l & 0x80)) || (!(res1.b.l & 0x80) && (res3.b.l & 0x80)))
+            _p.Overflow=1;
+          else
+            _p.Overflow=0;
+          }
+        else
+          _p.Overflow=0;*/
+        _p.Overflow = !!res3.b.h != !!((res3.b.l & 0x80) ^ (res1.b.l & 0x80) ^ (res2.b.l & 0x80));
+
 				goto aggFlagA;
 				break;
 
 			case 0xea:
 				break;
+
+#ifdef CPU_KIMKLONE
+			case 0xeb:    // RTS_K3
+				break;
+#endif
 
 			case 0xec:
 				res3.w=(SWORD)_x - GetValue(Pipe2.word);
@@ -1831,6 +2173,13 @@ aggSottr:
 				break;
 #endif
 
+#ifdef CPU_KIMKLONE
+			case 0xf3:    // LDA_K2
+				break;
+			case 0xf4:    // LDK3
+				break;
+#endif
+
 			case 0xf5:
 				res2.b.l=ram_seg[Pipe2.bytes.byte1+_x];
 				_pc++;
@@ -1865,6 +2214,13 @@ aggSottr:
 			case 0xfa:
 				_x=stack_seg[++_s];
 				goto aggFlagX;
+				break;
+#endif
+
+#ifdef CPU_KIMKLONE
+			case 0xfb:    // RTI_K3
+				break;
+			case 0xfc:    // LDK3
 				break;
 #endif
 
