@@ -339,7 +339,7 @@ const char CopyrightString[]= {'A','m','i','c','o','2','0','0','0',' ','E','m','
 const char CopyrightString[]= {'K','i','m','K','l','o','n','e',' ','E','m','u','l','a','t','o','r',' ','v',
 #endif
 
-	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '0','1','/','0','2','/','2','4', 0 };
+	VERNUMH+'0','.',VERNUML/10+'0',(VERNUML % 10)+'0',' ','-',' ', '0','2','/','0','2','/','2','4', 0 };
 
 const char Copyr1[]="(C) Dario's Automation 2019-2024 - G.Dar\xd\xa\x0";
 

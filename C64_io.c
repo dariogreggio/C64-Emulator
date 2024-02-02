@@ -786,17 +786,17 @@ IWMSELDRV1	$C08A*/
       i=ram_seg[t];
 		}
 #endif
+  
+#ifdef CPU_KIMKLONE 
+  if(t < MAX_RAM) 
+    i=ram_seg[MAKELONG(t,*theK)];
+#endif
+
 
 //		wsprintf(myBuf,"read8 a %04x, %02x\n",t1,i);
 //		_lwrite(spoolFile,myBuf,strlen(myBuf));
 	return i;
 	}
-
-#ifdef KIMKLONE 
-BYTE GetValueExt(DWORD t) {
-  return GetValue(t);
-	}
-#endif
 
 SWORD GetIntValue(SWORD t) {
 	register SWORD i;
@@ -1001,17 +1001,16 @@ SWORD GetIntValue(SWORD t) {
 		}
 #endif
 
+#ifdef CPU_KIMKLONE 
+  if(t < MAX_RAM) 
+    i=MAKEWORD(ram_seg[MAKELONG(t,*theK)],ram_seg[MAKELONG(t+1,*theK)]);
+#endif
+
 
 //			wsprintf(myBuf,"read16 a %04x, %02x\n",t1,i);
 //		_lwrite(spoolFile,myBuf,strlen(myBuf));
 	return i;
 	}
-
-#ifdef KIMKLONE 
-SWORD GetIntValueExt(DWORD t) {
-  return GetIntValue(t);
-	}
-#endif
 
 BYTE GetPipe(SWORD t) {
 
@@ -1221,15 +1220,17 @@ BYTE GetPipe(SWORD t) {
 #endif
     }
 #endif
+  
+#ifdef CPU_KIMKLONE 
+  if(t < MAX_RAM) {
+    Pipe1=ram_seg[MAKELONG(t++,*theK)];
+    Pipe2.bytes.byte1=ram_seg[MAKELONG(t++,*theK)];
+    Pipe2.bytes.byte2=ram_seg[MAKELONG(t,*theK)];
+    }
+#endif
 
 	return Pipe1;
 	}
-
-#ifdef KIMKLONE 
-BYTE GetPipeExt(DWORD t) {
-  return GetPipe(t);
-	}
-#endif
 
 void PutValue(SWORD t,BYTE t1) {
 	register SWORD i;
@@ -1724,12 +1725,11 @@ IWMSELDRV1	$C08A*/
       ram_seg[t]=t1;
 		}
 #endif
+
+#ifdef CPU_KIMKLONE
+  if(t < MAX_RAM) 
+    ram_seg[MAKELONG(t,*theK)]=t1;
+#endif
   
 	}
 
-#ifdef KIMKLONE 
-void PutValueExt(DWORD t,BYTE t1) {
-  
-  PutValue(t,t1);
-	}
-#endif
